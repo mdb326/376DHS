@@ -29,6 +29,10 @@ int get_val(int key, std::string serverIP, int serverPort){
 
     std::string message = "Get" + std::to_string(key);
     send(clientSocket, message.c_str(), message.length(), 0);
+    char buffer[1024] = { 0 };
+    recv(clientSocket, buffer, sizeof(buffer), 0);
+    std::cout << "Message from server: " << buffer
+                << std::endl;
 
     // closing socket
     close(clientSocket);
@@ -40,7 +44,8 @@ int main()
     int port = 8080;
     std::string SERVER_IP = "127.0.0.1";
     
-    get_val(5, SERVER_IP, port);
+    get_val(501, SERVER_IP, port);
+    get_val(502, SERVER_IP, port);
     
 
     return 0;

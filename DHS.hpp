@@ -18,13 +18,13 @@ class DHS {
 template <typename T>
 DHS<T>::DHS(){
     bucket_cnt = m.bucket_count();
-    std::cout << "Cnt:" << bucket_cnt << std::endl;
+    // std::cout << "Cnt:" << bucket_cnt << std::endl;
 }
 
 template <typename T>
 T DHS<T>::get(int key){
     if (m.count(key)){
-        std::cout <<"Bucket: "<< m.bucket(key) << std::endl;
+        // std::cout <<"Bucket: "<< m.bucket(key) << std::endl;
         return m[key];
     }
     return NULL;
@@ -36,8 +36,8 @@ bool DHS<T>::put(int key, T val){
     }
     m[key] = val;
     int cnt = m.bucket_count();
-    if (cnt != bucket_cnt){
-        std::cout << "Grew" << std::endl;
-    }
+    // if (cnt != bucket_cnt){
+    //     std::cout << "Grew" << std::endl;
+    // }
     return true;
 }
