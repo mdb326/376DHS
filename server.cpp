@@ -3,6 +3,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include "DHS.hpp"
 
 int main() {
     //Cupid: 128.180.120.70
