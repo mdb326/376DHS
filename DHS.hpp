@@ -21,14 +21,14 @@ DHS<T>::DHS(){
 
 template <typename T>
 T DHS<T>::get(int key){
-    if (m.contains(key)){
+    if (m.count(key)){
         return m[key];
     }
     return NULL;
 }
 template <typename T>
 bool DHS<T>::put(int key, T val){
-    if (m.contains(key)){
+    if (m.count(key)){
         return false;
     }
     m[key] = val;
