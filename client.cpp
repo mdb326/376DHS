@@ -8,6 +8,7 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <random>
+#include <climits>
 
 int get_val(int key, std::string serverIP, int serverPort){
     int clientSocket = socket(AF_INET, SOCK_STREAM, 0);
@@ -33,8 +34,7 @@ int get_val(int key, std::string serverIP, int serverPort){
     send(clientSocket, message.c_str(), message.length(), 0);
     char buffer[1024] = { 0 };
     recv(clientSocket, buffer, sizeof(buffer), 0);
-    std::cout << "Message from server: " << buffer
-                << std::endl;
+    
 
     
     // closing socket
@@ -54,7 +54,7 @@ int put_val(int key, int val, std::string serverIP, int serverPort){
 
     if (inet_pton(AF_INET, serverIP.c_str(), &serverAddress.sin_addr) <= 0) {
         std::cerr << "Invalid IP address" << std::endl;
-        return 1;
+        return NULL;
     }
 
     if (connect(clientSocket,
@@ -62,18 +62,17 @@ int put_val(int key, int val, std::string serverIP, int serverPort){
         sizeof(serverAddress)) < 0) {
         perror("connect");
         close(clientSocket);
-        return 1;
+        return NULL;
     }
 
     std::string message = "Put" + std::to_string(key) + '|' + std::to_string(val);
     send(clientSocket, message.c_str(), message.length(), 0);
     char buffer[1024] = { 0 };
     recv(clientSocket, buffer, sizeof(buffer), 0);
-    std::cout << "Message from server: " << buffer
-                << std::endl;
 
     // closing socket
     close(clientSocket);
+    return buffer[0] == '1';
 }
 int generateRandomInteger(int min, int max) {
     thread_local static std::random_device rd; // creates random device (unique to each thread to prevent race cons) (static to avoid reinitialization)
@@ -95,10 +94,15 @@ int main()
     int failed_gets = 0;
     
     for(int i = 0; i < operations; i++){
-        int key = generateRandomInteger(INT8_MIN, INT8_MAX);
+        int key = generateRandomInteger(INT_MIN, INT_MAX);
         if (generateRandomInteger(1,5) == 1){
-            int val = generateRandomInteger(INT8_MIN, INT8_MAX);
-            put_val(key, val, SERVER_IP, port);
+            int val = generateRandomInteger(INT_MIN, INT_MAX);
+            if(put_val(key, val, SERVER_IP, port)){
+                successful_puts++;
+            }
+            else{
+                failed_puts++;
+            }
         }
         else{
             if (get_val(key, SERVER_IP, port) == NULL){
@@ -119,6 +123,8 @@ int main()
 
     std::cout << "Successful Gets: " << successful_gets << std::endl;
     std::cout << "Failed Gets: " << failed_gets << std::endl;
+    std::cout << "Successful Puts: " << successful_puts << std::endl;
+    std::cout << "Failed Puts: " << failed_puts << std::endl;
 
     return 0;
 }
