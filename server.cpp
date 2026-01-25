@@ -39,6 +39,7 @@ int main() {
                 << std::endl;
 
         if (buffer[0] == 'G'){
+            //get
             int res = map.get(atoi(&buffer[3]));
             if(res == NULL){
                 std::cout << "null" << std::endl;
@@ -48,6 +49,18 @@ int main() {
             }
             
             std::cout << res << std::endl;
+        }
+        else if (buffer[0] == 'P'){
+            //put
+            std::string s = std::string(buffer);
+            std::string keyString = s.substr(0, s.find('|'));
+            std::string valString = s.substr(s.find('|'));
+
+            std::cout << keyString << std::endl;
+            std::cout << valString << std::endl;
+
+            bool res = map.put(stoi(keyString), stoi(valString));
+            send(clientSocket, std::to_string(res).c_str(), std::to_string(res).length(), 0);
         }
 
         // closing the socket.
