@@ -5,6 +5,8 @@
 #include <unistd.h>
 #include "DHS.hpp"
 
+// std::vector<uint8_t> serializeString()
+
 int main() {
     DHS<int> map = DHS<int>();
     map.put(502, 15);
@@ -40,15 +42,18 @@ int main() {
 
         if (buffer[0] == 'G'){
             //get
+            //serialization: 0 for null, 1 for not null
+            //4 bytes for length of value
+            //value
             int res = map.get(atoi(&buffer[3]));
             if(res == NULL){
-                std::cout << "null" << std::endl;
+                std::string socketVal = "0";
+                send(clientSocket, socketVal.c_str(), socketVal.length(), 0);
             }
             else{
-                send(clientSocket, std::to_string(res).c_str(), std::to_string(res).length(), 0);
+                send(clientSocket, ("1"+std::to_string(res)).c_str(), std::to_string(res).length()+1, 0);
             }
             
-            std::cout << res << std::endl;
         }
         else if (buffer[0] == 'P'){
             //put
@@ -56,8 +61,6 @@ int main() {
             std::string keyString = s.substr(3, s.find('|'));
             std::string valString = s.substr(s.find('|')+1);
 
-            std::cout << keyString << std::endl;
-            std::cout << valString << std::endl;
 
             bool res = map.put(stoi(keyString), stoi(valString));
             send(clientSocket, std::to_string(res).c_str(), std::to_string(res).length(), 0);

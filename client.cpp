@@ -16,7 +16,7 @@ int get_val(int key, std::string serverIP, int serverPort){
 
     if (inet_pton(AF_INET, serverIP.c_str(), &serverAddress.sin_addr) <= 0) {
         std::cerr << "Invalid IP address" << std::endl;
-        return 1;
+        return NULL;
     }
 
     if (connect(clientSocket,
@@ -24,7 +24,7 @@ int get_val(int key, std::string serverIP, int serverPort){
         sizeof(serverAddress)) < 0) {
         perror("connect");
         close(clientSocket);
-        return 1;
+        return NULL;
     }
 
     std::string message = "Get" + std::to_string(key);
