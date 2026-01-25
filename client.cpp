@@ -78,6 +78,8 @@ int main()
     get_val(502, SERVER_IP, port);
     put_val(501, 500000, SERVER_IP, port);
     get_val(501, SERVER_IP, port);
+    put_val(501, 500001, SERVER_IP, port);
+    get_val(501, SERVER_IP, port);
 
     return 0;
 }
