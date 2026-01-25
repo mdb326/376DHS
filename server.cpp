@@ -53,7 +53,7 @@ int main() {
         else if (buffer[0] == 'P'){
             //put
             std::string s = std::string(buffer);
-            std::string keyString = s.substr(0, s.find('|'));
+            std::string keyString = s.substr(3, s.find('|'));
             std::string valString = s.substr(s.find('|')+1);
 
             std::cout << keyString << std::endl;
