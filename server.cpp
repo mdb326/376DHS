@@ -54,7 +54,7 @@ int main() {
             //put
             std::string s = std::string(buffer);
             std::string keyString = s.substr(0, s.find('|'));
-            std::string valString = s.substr(s.find('|'));
+            std::string valString = s.substr(s.find('|')+1);
 
             std::cout << keyString << std::endl;
             std::cout << valString << std::endl;
