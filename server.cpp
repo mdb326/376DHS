@@ -4,12 +4,31 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include "DHS.hpp"
+#include <fstream>
+#include <vector>
 
 // std::vector<uint8_t> serializeString()
 
+std::vector<std::string> getProcesses(std::string filename){
+    std::ifstream config("config.txt");
+    std::string line;
+    std::vector<std::string> result;
+
+    while (std::getline(config, line)) {
+        if (line == "Servers:"){
+            continue;
+        }
+        result.push_back(line);
+    }
+
+    config.close(); 
+    return result;
+}
+
 int main() {
     DHS<int> map = DHS<int>();
-    map.put(502, 15);
+    std::vector<std::string> processIPS = getProcesses("config.txt");
+    // map.put(502, 15);
     //Cupid: 128.180.120.70
     int port = 8080;
     int server_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -43,7 +62,7 @@ int main() {
         if (buffer[0] == 'G'){
             //get
             //serialization: 0 for null, 1 for not null
-            //4 bytes for length of value
+            //4 bytes for length of value?
             //value
             int res = map.get(atoi(&buffer[3]));
             if(res == NULL){
