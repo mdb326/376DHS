@@ -59,8 +59,8 @@ int main() {
         // recieving data
         char buffer[1024] = { 0 };
         recv(clientSocket, buffer, sizeof(buffer), 0);
-        std::cout << "Message from client: " << buffer
-                << std::endl;
+        // std::cout << "Message from client: " << buffer
+        //         << std::endl;
 
         if (buffer[0] == 'G'){
             //get
@@ -83,7 +83,7 @@ int main() {
             std::string keyString = s.substr(3, s.find('|'));
             std::string valString = s.substr(s.find('|')+1);
 
-            std::cout << keyString << std::endl;
+            // std::cout << keyString << std::endl;
 
             bool res = map.put(stoi(keyString), stoi(valString));
             send(clientSocket, std::to_string(res).c_str(), std::to_string(res).length(), 0);
@@ -91,9 +91,9 @@ int main() {
 
         // closing the socket.
         close(clientSocket);
-        if (cnt == 1000){
-            break;
-        }
+        // if (cnt == 1000){
+        //     break;
+        // }
     }
     
     close(server_fd);

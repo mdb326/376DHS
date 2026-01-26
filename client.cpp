@@ -168,6 +168,7 @@ int main()
                 successful_gets++;
             }
         }
+        std::cout << i << std::endl;
     }
     
     // get_val(501, SERVER_IP, port);
