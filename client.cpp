@@ -127,6 +127,7 @@ int main()
     
     // barrier
     for (std::string process : processes){
+        std::cout << process << std::endl;
         while(true){
             int clientSocket = socket(AF_INET, SOCK_STREAM, 0);
 
@@ -144,7 +145,7 @@ int main()
                 break;
             }
             close(clientSocket);
-            sleep(0.1);
+            sleep(1);
         }
     }
     

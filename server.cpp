@@ -27,7 +27,7 @@ std::vector<std::string> getProcesses(std::string filename){
 
 int main() {
     DHS<int> map = DHS<int>();
-    std::vector<std::string> processIPS = getProcesses("config.txt");
+    // std::vector<std::string> processIPS = getProcesses("config.txt");
     // map.put(502, 15);
     //Cupid: 128.180.120.70
     int port = 1895;
