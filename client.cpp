@@ -9,7 +9,26 @@
 #include <unistd.h>
 #include <random>
 #include <climits>
+#include <vector>
+#include <fstream>
 
+
+
+std::vector<std::string> getProcesses(std::string filename){
+    std::ifstream config("config.txt");
+    std::string line;
+    std::vector<std::string> result;
+
+    while (std::getline(config, line)) {
+        if (line == "Servers:"){
+            continue;
+        }
+        result.push_back(line);
+    }
+
+    config.close(); 
+    return result;
+}
 int get_val(int key, std::string serverIP, int serverPort){
     int clientSocket = socket(AF_INET, SOCK_STREAM, 0);
 
@@ -85,6 +104,7 @@ int generateRandomInteger(int min, int max) {
 
 int main()
 {
+    std::vector<std::string> processes = getProcesses("config.txt");
     int port = 8080;
     int operations = 1000;
     std::string SERVER_IP = "127.0.0.1";
@@ -92,9 +112,50 @@ int main()
     int failed_puts = 0;
     int successful_gets = 0;
     int failed_gets = 0;
+
+    // int server_fd = socket(AF_INET, SOCK_STREAM, 0);
+    // if (server_fd < 0){
+    //     std::cerr << "Error creating socket" << std::endl;
+    //     return 1;
+    // }
+
+    // sockaddr_in serverAddress{};
+    // serverAddress.sin_family = AF_INET;
+    // serverAddress.sin_port = htons(port);
+    // serverAddress.sin_addr.s_addr = INADDR_ANY;
+
+    // bind(server_fd, (struct sockaddr*)&serverAddress,
+    //      sizeof(serverAddress));
+
+    // // listening to the assigned socket
+    // listen(server_fd, 5);
+
+    //start server here
+    pid_t pid = fork();
+    if (pid == 0){
+        //child
+        char* const args[] = {
+            (char*)"./server",
+            nullptr
+        };
+        execv("./server", args);
+        _exit(0);
+    }
+    
+    //barrier
+    // int totalReady = 0;
+    // while (totalReady < processes.size()){
+    //     int clientSocket
+    //         = accept(server_fd, nullptr, nullptr);
+
+    //     // recieving data
+    //     char buffer[1024] = { 0 };
+    //     recv(clientSocket, buffer, sizeof(buffer), 0);
+    //     totalReady++;
+    // }
     
     for(int i = 0; i < operations; i++){
-        int key = generateRandomInteger(INT_MIN, INT_MAX);
+        int key = generateRandomInteger(1, 10);
         if (generateRandomInteger(1,5) == 1){
             int val = generateRandomInteger(INT_MIN, INT_MAX);
             if(put_val(key, val, SERVER_IP, port)){
