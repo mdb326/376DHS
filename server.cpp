@@ -48,7 +48,6 @@ int main() {
     // listening to the assigned socket
     listen(server_fd, 5);
 
-    std::cout << "huh" << std::endl;
     int cnt = 0;
     // accepting connection request
     while (true){
@@ -68,7 +67,6 @@ int main() {
             //serialization: 0 for null, 1 for not null
             //4 bytes for length of value?
             //value
-            std::cout << "Hmmm" << std::endl;
             int res = map.get(atoi(&buffer[3]));
             if(res == NULL){
                 std::string socketVal = "0";

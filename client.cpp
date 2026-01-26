@@ -114,16 +114,16 @@ int main()
     int failed_gets = 0;
 
     //start server here
-    // pid_t pid = fork();
-    // if (pid == 0){
-    //     //child
-    //     char* const args[] = {
-    //         (char*)"./server",
-    //         nullptr
-    //     };
-    //     execv("./server", args);
-    //     _exit(0);
-    // }
+    pid_t pid = fork();
+    if (pid == 0){
+        //child
+        char* const args[] = {
+            (char*)"./server",
+            nullptr
+        };
+        execv("./server", args);
+        _exit(0);
+    }
     
     // barrier
     for (std::string process : processes){
