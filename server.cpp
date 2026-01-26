@@ -48,13 +48,15 @@ int main() {
     // listening to the assigned socket
     listen(server_fd, 5);
 
-    std::cout << "started" << std::endl;
-
+    std::cout << "huh" << std::endl;
+    int cnt = 0;
     // accepting connection request
     while (true){
         int clientSocket
             = accept(server_fd, nullptr, nullptr);
 
+        
+        cnt++;
         // recieving data
         char buffer[1024] = { 0 };
         recv(clientSocket, buffer, sizeof(buffer), 0);
@@ -66,6 +68,7 @@ int main() {
             //serialization: 0 for null, 1 for not null
             //4 bytes for length of value?
             //value
+            std::cout << "Hmmm" << std::endl;
             int res = map.get(atoi(&buffer[3]));
             if(res == NULL){
                 std::string socketVal = "0";
@@ -76,12 +79,13 @@ int main() {
             }
             
         }
-        else if (buffer[0] == 'P'){
+        else if (buffer[0] == 'P'){    
             //put
             std::string s = std::string(buffer);
             std::string keyString = s.substr(3, s.find('|'));
             std::string valString = s.substr(s.find('|')+1);
 
+            std::cout << keyString << std::endl;
 
             bool res = map.put(stoi(keyString), stoi(valString));
             send(clientSocket, std::to_string(res).c_str(), std::to_string(res).length(), 0);
@@ -89,6 +93,9 @@ int main() {
 
         // closing the socket.
         close(clientSocket);
+        if (cnt == 1000){
+            break;
+        }
     }
     
     close(server_fd);

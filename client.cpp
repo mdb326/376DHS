@@ -107,23 +107,23 @@ int main()
     std::vector<std::string> processes = getProcesses("config.txt");
     int port = 1895;
     int operations = 1000;
-    std::string SERVER_IP = "127.0.0.1";
+    std::string SERVER_IP = processes[0];
     int successful_puts = 0;
     int failed_puts = 0;
     int successful_gets = 0;
     int failed_gets = 0;
 
     //start server here
-    pid_t pid = fork();
-    if (pid == 0){
-        //child
-        char* const args[] = {
-            (char*)"./server",
-            nullptr
-        };
-        execv("./server", args);
-        _exit(0);
-    }
+    // pid_t pid = fork();
+    // if (pid == 0){
+    //     //child
+    //     char* const args[] = {
+    //         (char*)"./server",
+    //         nullptr
+    //     };
+    //     execv("./server", args);
+    //     _exit(0);
+    // }
     
     // barrier
     for (std::string process : processes){
