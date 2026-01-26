@@ -105,7 +105,7 @@ int generateRandomInteger(int min, int max) {
 int main()
 {
     std::vector<std::string> processes = getProcesses("config.txt");
-    int port = 8080;
+    int port = 1895;
     int operations = 1000;
     std::string SERVER_IP = "127.0.0.1";
     int successful_puts = 0;

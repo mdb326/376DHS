@@ -30,7 +30,7 @@ int main() {
     std::vector<std::string> processIPS = getProcesses("config.txt");
     // map.put(502, 15);
     //Cupid: 128.180.120.70
-    int port = 8080;
+    int port = 1895;
     int server_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (server_fd < 0){
         std::cerr << "Error creating socket" << std::endl;
@@ -47,6 +47,8 @@ int main() {
 
     // listening to the assigned socket
     listen(server_fd, 5);
+
+    std::cout << "started" << std::endl;
 
     // accepting connection request
     while (true){
