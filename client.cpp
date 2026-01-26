@@ -113,23 +113,6 @@ int main()
     int successful_gets = 0;
     int failed_gets = 0;
 
-    // int server_fd = socket(AF_INET, SOCK_STREAM, 0);
-    // if (server_fd < 0){
-    //     std::cerr << "Error creating socket" << std::endl;
-    //     return 1;
-    // }
-
-    // sockaddr_in serverAddress{};
-    // serverAddress.sin_family = AF_INET;
-    // serverAddress.sin_port = htons(port);
-    // serverAddress.sin_addr.s_addr = INADDR_ANY;
-
-    // bind(server_fd, (struct sockaddr*)&serverAddress,
-    //      sizeof(serverAddress));
-
-    // // listening to the assigned socket
-    // listen(server_fd, 5);
-
     //start server here
     pid_t pid = fork();
     if (pid == 0){
@@ -142,17 +125,28 @@ int main()
         _exit(0);
     }
     
-    //barrier
-    // int totalReady = 0;
-    // while (totalReady < processes.size()){
-    //     int clientSocket
-    //         = accept(server_fd, nullptr, nullptr);
+    // barrier
+    for (std::string process : processes){
+        while(true){
+            int clientSocket = socket(AF_INET, SOCK_STREAM, 0);
 
-    //     // recieving data
-    //     char buffer[1024] = { 0 };
-    //     recv(clientSocket, buffer, sizeof(buffer), 0);
-    //     totalReady++;
-    // }
+            sockaddr_in serverAddress{};
+            serverAddress.sin_family = AF_INET;
+            serverAddress.sin_port = htons(port);
+
+            if (inet_pton(AF_INET, process.c_str(), &serverAddress.sin_addr) <= 0) {
+                std::cerr << "Invalid IP address" << std::endl;
+                return NULL;
+            }
+
+            if (connect(clientSocket, (struct sockaddr*)&serverAddress, sizeof(serverAddress)) == 0) {
+                close(clientSocket);
+                break;
+            }
+            close(clientSocket);
+            sleep(0.1);
+        }
+    }
     
     for(int i = 0; i < operations; i++){
         int key = generateRandomInteger(1, 10);
