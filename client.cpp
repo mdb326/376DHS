@@ -151,6 +151,9 @@ int main()
     
     for(int i = 0; i < operations; i++){
         int key = generateRandomInteger(1, 10);
+        int index = key % processes.size();
+        SERVER_IP = processes[index];
+        std::cout << SERVER_IP << std::endl;
         if (generateRandomInteger(1,5) == 1){
             int val = generateRandomInteger(INT_MIN, INT_MAX);
             if(put_val(key, val, SERVER_IP, port)){
