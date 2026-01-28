@@ -1,5 +1,6 @@
 #include <unordered_map>
 #include <iostream>
+#include <shared_mutex>
 //use bucket interface for locks?
 
 template <typename T>
@@ -12,6 +13,7 @@ class DHS {
     private:
         std::unordered_map<int, T> m;
         int bucket_cnt;
+        std::shared_mutex readMutex;
 
 };
 
@@ -23,19 +25,24 @@ DHS<T>::DHS(){
 
 template <typename T>
 T DHS<T>::get(int key){
+    readMutex.lock_shared();
     if (m.count(key)){
         // std::cout <<"Bucket: "<< m.bucket(key) << std::endl;
+        readMutex.unlock_shared();
         return m[key];
     }
+    readMutex.unlock_shared();
     return NULL;
 }
 template <typename T>
 bool DHS<T>::put(int key, T val){
+    readMutex.lock();
     if (m.count(key)){
+        readMutex.unlock();
         return false;
     }
     m[key] = val;
-    int cnt = m.bucket_count();
+    readMutex.unlock();
     // if (cnt != bucket_cnt){
     //     std::cout << "Grew" << std::endl;
     // }
