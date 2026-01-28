@@ -145,7 +145,7 @@ int main()
                 break;
             }
             close(clientSocket);
-            sleep(1);
+            sleep(0.05);
         }
     }
     
