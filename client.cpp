@@ -1,5 +1,3 @@
-// C++ program to illustrate the client application in the
-// socket programming
 #include <cstring>
 #include <iostream>
 #include <string>
@@ -11,6 +9,7 @@
 #include <climits>
 #include <vector>
 #include <fstream>
+#include <chrono>
 
 
 template <typename T>
@@ -151,7 +150,7 @@ int main()
 {
     std::vector<std::string> processes = getProcesses("config.txt");
     int port = 1895;
-    int operations = 1000;
+    int operations = 1000000;
     std::string SERVER_IP = processes[0];
     int successful_puts = 0;
     int failed_puts = 0;
@@ -190,15 +189,14 @@ int main()
                 break;
             }
             close(clientSocket);
-            sleep(0.05);
         }
     }
     
+    std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
     for(int i = 0; i < operations; i++){
         int key = generateRandomInteger(1, 10);
         int index = key % processes.size();
         SERVER_IP = processes[index];
-        std::cout << SERVER_IP << std::endl;
         if (generateRandomInteger(1,5) == 1){
             int val = generateRandomInteger(INT_MIN, INT_MAX);
             int res = put_val(key, val, SERVER_IP, port);
@@ -218,6 +216,9 @@ int main()
             }
         }
     }
+    std::chrono::high_resolution_clock::time_point t2 = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> exec_time_i = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
+    std::cout << "Finished in " << exec_time_i.count() << " Seconds" << std::endl;
     
     // get_val(501, SERVER_IP, port);
     // get_val(502, SERVER_IP, port);

@@ -9,7 +9,6 @@
 #include <cstring>
 #include "serialization.cpp"
 
-// std::vector<uint8_t> serializeString()
 
 std::vector<std::string> getProcesses(std::string filename){
     std::ifstream config("config.txt");
