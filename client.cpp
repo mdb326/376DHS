@@ -42,25 +42,7 @@ std::vector<std::string> getProcesses(std::string filename){
     config.close(); 
     return result;
 }
-int get_val(int key, std::string serverIP, int serverPort){
-    int clientSocket = socket(AF_INET, SOCK_STREAM, 0);
-
-    sockaddr_in serverAddress{};
-    serverAddress.sin_family = AF_INET;
-    serverAddress.sin_port = htons(serverPort);
-
-    if (inet_pton(AF_INET, serverIP.c_str(), &serverAddress.sin_addr) <= 0) {
-        std::cerr << "Invalid IP address" << std::endl;
-        return NULL;
-    }
-
-    if (connect(clientSocket,
-        (struct sockaddr*)&serverAddress,
-        sizeof(serverAddress)) < 0) {
-        perror("connect");
-        close(clientSocket);
-        return NULL;
-    }
+int get_val(int key, std::string serverIP, int serverPort, int clientSocket){
     std::vector<uint8_t> message;
     message.reserve(5);
     message.push_back('G');
@@ -74,7 +56,6 @@ int get_val(int key, std::string serverIP, int serverPort){
     char status;
     recv(clientSocket, &status, 1, 0);
     if (status == '0'){
-        close(clientSocket);
         return NULL;
     }
     int netLen;
@@ -90,25 +71,7 @@ int get_val(int key, std::string serverIP, int serverPort){
 
     return ntohl(result);
 }
-int put_val(int key, int val, std::string serverIP, int serverPort){
-    int clientSocket = socket(AF_INET, SOCK_STREAM, 0);
-
-    sockaddr_in serverAddress{};
-    serverAddress.sin_family = AF_INET;
-    serverAddress.sin_port = htons(serverPort);
-
-    if (inet_pton(AF_INET, serverIP.c_str(), &serverAddress.sin_addr) <= 0) {
-        std::cerr << "Invalid IP address" << std::endl;
-        return NULL;
-    }
-
-    if (connect(clientSocket,
-        (struct sockaddr*)&serverAddress,
-        sizeof(serverAddress)) < 0) {
-        perror("connect");
-        close(clientSocket);
-        return NULL;
-    }
+int put_val(int key, int val, std::string serverIP, int serverPort, int clientSocket){
     std::vector<uint8_t> message;
     message.reserve(13);
     //P
@@ -133,7 +96,6 @@ int put_val(int key, int val, std::string serverIP, int serverPort){
     recv(clientSocket, buffer, sizeof(buffer), 0);
 
     // closing socket
-    close(clientSocket);
     return buffer[0];
 }
 int generateRandomInteger(int min, int max) {
@@ -170,6 +132,7 @@ int main()
     }
     
     // barrier
+    std::vector<int> sockets(processes.size());
     for (std::string process : processes){
         std::cout << process << std::endl;
         while(true){
@@ -185,7 +148,7 @@ int main()
             }
 
             if (connect(clientSocket, (struct sockaddr*)&serverAddress, sizeof(serverAddress)) == 0) {
-                close(clientSocket);
+                sockets.push_back(clientSocket);
                 break;
             }
             close(clientSocket);
@@ -197,9 +160,10 @@ int main()
         int key = generateRandomInteger(1, 10);
         int index = key % processes.size();
         SERVER_IP = processes[index];
+        int socket = sockets[i];
         if (generateRandomInteger(1,5) == 1){
             int val = generateRandomInteger(INT_MIN, INT_MAX);
-            int res = put_val(key, val, SERVER_IP, port);
+            int res = put_val(key, val, SERVER_IP, port, socket);
             if(res){
                 successful_puts++;
             }
@@ -208,7 +172,7 @@ int main()
             }
         }
         else{
-            if (get_val(key, SERVER_IP, port) == NULL){
+            if (get_val(key, SERVER_IP, port, socket) == NULL){
                 failed_gets++;
             }
             else{
