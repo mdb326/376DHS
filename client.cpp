@@ -13,7 +13,21 @@
 #include <fstream>
 
 
-
+template <typename T>
+std::vector<uint8_t> serialize_raw(const T& val) {
+    std::vector<uint8_t> bytes(sizeof(T));
+    std::memcpy(bytes.data(), &val, sizeof(T));
+    return bytes;
+}
+bool recv_all(int sock, void* buf, size_t len) {
+    size_t received = 0;
+    while (received < len) {
+        ssize_t r = recv(sock, (char*)buf + received, len - received, 0);
+        if (r <= 0) return false;
+        received += r;
+    }
+    return true;
+}
 std::vector<std::string> getProcesses(std::string filename){
     std::ifstream config("config.txt");
     std::string line;
@@ -48,21 +62,34 @@ int get_val(int key, std::string serverIP, int serverPort){
         close(clientSocket);
         return NULL;
     }
+    std::vector<uint8_t> message;
+    message.reserve(5);
+    message.push_back('G');
+    uint8_t buf[4];
+    int net_key = htonl(key);
+    std::memcpy(buf, &net_key, 4);
+    message.insert(message.end(), buf, buf + 4);
 
-    std::string message = "Get" + std::to_string(key);
-    send(clientSocket, message.c_str(), message.length(), 0);
-    char buffer[1024] = { 0 };
-    recv(clientSocket, buffer, sizeof(buffer), 0);
-    
+    send(clientSocket, message.data(), message.size(), 0);
 
-    
-    // closing socket
-    close(clientSocket);
-
-    if (buffer[0] == '0'){
+    char status;
+    recv(clientSocket, &status, 1, 0);
+    if (status == '0'){
+        close(clientSocket);
         return NULL;
     }
-    return std::stoi(std::string(&buffer[1]));
+    int netLen;
+    recv_all(clientSocket, &netLen, sizeof(netLen));
+    int len = ntohl(netLen);
+    
+    std::vector<uint8_t> value(len);
+    recv_all(clientSocket, value.data(), len);
+    
+    int result;
+    std::memcpy(&result, value.data(), sizeof(result));
+
+
+    return ntohl(result);
 }
 int put_val(int key, int val, std::string serverIP, int serverPort){
     int clientSocket = socket(AF_INET, SOCK_STREAM, 0);
@@ -83,15 +110,32 @@ int put_val(int key, int val, std::string serverIP, int serverPort){
         close(clientSocket);
         return NULL;
     }
+    std::vector<uint8_t> message;
+    message.reserve(13);
+    //P
+    message.push_back('P');
+    //key
+    uint8_t buf[4];
+    int net_key = htonl(key);
+    std::memcpy(buf, &net_key, 4);
+    message.insert(message.end(), buf, buf + 4);
+    //length(4)
+    int len = htonl(4);
+    std::memcpy(buf, &len, 4);
+    message.insert(message.end(), buf, buf + 4);
+    //val
+    int net_val = htonl(val);
+    std::memcpy(buf, &net_val, 4);
+    message.insert(message.end(), buf, buf + 4);
 
-    std::string message = "Put" + std::to_string(key) + '|' + std::to_string(val);
-    send(clientSocket, message.c_str(), message.length(), 0);
+    send(clientSocket, message.data(), message.size(), 0);
+
     char buffer[1024] = { 0 };
     recv(clientSocket, buffer, sizeof(buffer), 0);
 
     // closing socket
     close(clientSocket);
-    return buffer[0] == '1';
+    return buffer[0];
 }
 int generateRandomInteger(int min, int max) {
     thread_local static std::random_device rd; // creates random device (unique to each thread to prevent race cons) (static to avoid reinitialization)
@@ -100,6 +144,7 @@ int generateRandomInteger(int min, int max) {
 
     return distrib(gen); // Generate random number from the uniform int dist (inclusive)
 }
+
 
 
 int main()
@@ -156,7 +201,8 @@ int main()
         std::cout << SERVER_IP << std::endl;
         if (generateRandomInteger(1,5) == 1){
             int val = generateRandomInteger(INT_MIN, INT_MAX);
-            if(put_val(key, val, SERVER_IP, port)){
+            int res = put_val(key, val, SERVER_IP, port);
+            if(res){
                 successful_puts++;
             }
             else{
@@ -171,7 +217,6 @@ int main()
                 successful_gets++;
             }
         }
-        std::cout << i << std::endl;
     }
     
     // get_val(501, SERVER_IP, port);

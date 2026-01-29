@@ -6,6 +6,8 @@
 #include "DHS.hpp"
 #include <fstream>
 #include <vector>
+#include <cstring>
+#include "serialization.cpp"
 
 // std::vector<uint8_t> serializeString()
 
@@ -24,9 +26,19 @@ std::vector<std::string> getProcesses(std::string filename){
     config.close(); 
     return result;
 }
+bool recv_all(int sock, void* buf, size_t len) {
+    size_t received = 0;
+    while (received < len) {
+        ssize_t r = recv(sock, (char*)buf + received, len - received, 0);
+        if (r <= 0) return false;
+        received += r;
+    }
+    return true;
+}
 
 int main() {
-    DHS<int> map = DHS<int>();
+    DHS map;
+    char type = '1';
     // std::vector<std::string> processIPS = getProcesses("config.txt");
     // map.put(502, 15);
     //Cupid: 128.180.120.70
@@ -54,40 +66,49 @@ int main() {
         int clientSocket
             = accept(server_fd, nullptr, nullptr);
 
-        
+        char op;
+        recv_all(clientSocket, &op, 1);
         cnt++;
         // recieving data
-        char buffer[1024] = { 0 };
-        recv(clientSocket, buffer, sizeof(buffer), 0);
-        // std::cout << "Message from client: " << buffer
-        //         << std::endl;
-
-        if (buffer[0] == 'G'){
+        if (op == 'G') {
             //get
-            //serialization: 0 for null, 1 for not null
-            //4 bytes for length of value?
-            //value
-            int res = map.get(atoi(&buffer[3]));
-            if(res == NULL){
-                std::string socketVal = "0";
-                send(clientSocket, socketVal.c_str(), socketVal.length(), 0);
+            int net_key;
+            recv_all(clientSocket, &net_key, 4);
+            int key = ntohl(net_key);
+
+            auto res = map.get(key);
+
+            if (res.size() == 0) {
+                char zero = '0';
+                send(clientSocket, &zero, 1, 0);
+            } else {
+                char one = '1';;
+                send(clientSocket, &one, 1, 0);
+                int len = htonl(res.size());
+                send(clientSocket, &len, sizeof(len), 0);
+                send(clientSocket, res.data(), len, 0);
             }
-            else{
-                send(clientSocket, ("1"+std::to_string(res)).c_str(), std::to_string(res).length()+1, 0);
-            }
-            
         }
-        else if (buffer[0] == 'P'){    
+        else if (op == 'P') {
             //put
-            std::string s = std::string(buffer);
-            std::string keyString = s.substr(3, s.find('|'));
-            std::string valString = s.substr(s.find('|')+1);
+            int net_key;
+            recv_all(clientSocket, &net_key, 4);
+            int key = ntohl(net_key);
 
-            // std::cout << keyString << std::endl;
+            int net_len;
+            recv_all(clientSocket, &net_len, 4);
+            int len = ntohl(net_len);
 
-            bool res = map.put(stoi(keyString), stoi(valString));
-            send(clientSocket, std::to_string(res).c_str(), std::to_string(res).length(), 0);
+            std::vector<uint8_t> value(len);
+            recv_all(clientSocket, value.data(), len);
+
+            bool ok = map.put(key, value);
+
+            send(clientSocket, &ok, 1, 0);
         }
+
+
+
 
         // closing the socket.
         close(clientSocket);

@@ -1,30 +1,25 @@
 #include <unordered_map>
 #include <iostream>
 #include <shared_mutex>
-//use bucket interface for locks?
+#include <vector>
 
-template <typename T>
 class DHS {
     public:
         DHS();
-        T get(int key);
-        bool put(int key, T val);
+        std::vector<uint8_t> get(int key);
+        bool put(int key, std::vector<uint8_t> val);
 
     private:
-        std::unordered_map<int, T> m;
-        int bucket_cnt;
+        std::unordered_map<int, std::vector<uint8_t>> m;
         std::shared_mutex readMutex;
 
 };
 
-template <typename T>
-DHS<T>::DHS(){
-    bucket_cnt = m.bucket_count();
+DHS::DHS(){
     // std::cout << "Cnt:" << bucket_cnt << std::endl;
 }
 
-template <typename T>
-T DHS<T>::get(int key){
+std::vector<uint8_t> DHS::get(int key){
     readMutex.lock_shared();
     if (m.count(key)){
         // std::cout <<"Bucket: "<< m.bucket(key) << std::endl;
@@ -32,10 +27,10 @@ T DHS<T>::get(int key){
         return m[key];
     }
     readMutex.unlock_shared();
-    return NULL;
+    return std::vector<uint8_t>();
 }
-template <typename T>
-bool DHS<T>::put(int key, T val){
+
+bool DHS::put(int key, std::vector<uint8_t> val){
     readMutex.lock();
     if (m.count(key)){
         readMutex.unlock();
