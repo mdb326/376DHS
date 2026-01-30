@@ -65,52 +65,54 @@ int main() {
         int clientSocket
             = accept(server_fd, nullptr, nullptr);
 
-        char op;
-        recv_all(clientSocket, &op, 1);
-        cnt++;
-        // recieving data
-        if (op == 'G') {
-            //get
-            int net_key;
-            recv_all(clientSocket, &net_key, 4);
-            int key = ntohl(net_key);
+        while(true){
+            char op;
+            recv_all(clientSocket, &op, 1);
+            cnt++;
+            // recieving data
+            if (op == 'G') {
+                //get
+                int net_key;
+                recv_all(clientSocket, &net_key, 4);
+                int key = ntohl(net_key);
 
-            auto res = map.get(key);
+                auto res = map.get(key);
 
-            if (res.size() == 0) {
-                char zero = '0';
-                send(clientSocket, &zero, 1, 0);
-            } else {
-                char one = '1';;
-                send(clientSocket, &one, 1, 0);
-                int len = htonl(res.size());
-                send(clientSocket, &len, sizeof(len), 0);
-                send(clientSocket, res.data(), len, 0);
+                if (res.size() == 0) {
+                    char zero = '0';
+                    send(clientSocket, &zero, 1, 0);
+                } else {
+                    char one = '1';;
+                    send(clientSocket, &one, 1, 0);
+                    int len = htonl(res.size());
+                    send(clientSocket, &len, sizeof(len), 0);
+                    send(clientSocket, res.data(), res.size(), 0);
+                }
             }
-        }
-        else if (op == 'P') {
-            //put
-            int net_key;
-            recv_all(clientSocket, &net_key, 4);
-            int key = ntohl(net_key);
+            else if (op == 'P') {
+                //put
+                int net_key;
+                recv_all(clientSocket, &net_key, 4);
+                int key = ntohl(net_key);
 
-            int net_len;
-            recv_all(clientSocket, &net_len, 4);
-            int len = ntohl(net_len);
+                int net_len;
+                recv_all(clientSocket, &net_len, 4);
+                int len = ntohl(net_len);
 
-            std::vector<uint8_t> value(len);
-            recv_all(clientSocket, value.data(), len);
+                std::vector<uint8_t> value(len);
+                recv_all(clientSocket, value.data(), len);
 
-            bool ok = map.put(key, value);
+                bool ok = map.put(key, value);
 
-            send(clientSocket, &ok, 1, 0);
+                send(clientSocket, &ok, 1, 0);
+            }
         }
 
 
 
 
         // closing the socket.
-        close(clientSocket);
+        // close(clientSocket);
         // if (cnt == 1000){
         //     break;
         // }

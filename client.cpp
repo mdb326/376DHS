@@ -50,7 +50,6 @@ int get_val(int key, std::string serverIP, int serverPort, int clientSocket){
     int net_key = htonl(key);
     std::memcpy(buf, &net_key, 4);
     message.insert(message.end(), buf, buf + 4);
-
     send(clientSocket, message.data(), message.size(), 0);
 
     char status;
@@ -112,7 +111,7 @@ int main()
 {
     std::vector<std::string> processes = getProcesses("config.txt");
     int port = 1895;
-    int operations = 1000000;
+    int operations = 1000;
     std::string SERVER_IP = processes[0];
     int successful_puts = 0;
     int failed_puts = 0;
@@ -132,7 +131,8 @@ int main()
     }
     
     // barrier
-    std::vector<int> sockets(processes.size());
+    std::vector<int> sockets;
+    sockets.reserve(processes.size());
     for (std::string process : processes){
         std::cout << process << std::endl;
         while(true){
@@ -157,10 +157,11 @@ int main()
     
     std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
     for(int i = 0; i < operations; i++){
+        // std::cout << i << std::endl;
         int key = generateRandomInteger(1, 10);
         int index = key % processes.size();
         SERVER_IP = processes[index];
-        int socket = sockets[i];
+        int socket = sockets[index];
         if (generateRandomInteger(1,5) == 1){
             int val = generateRandomInteger(INT_MIN, INT_MAX);
             int res = put_val(key, val, SERVER_IP, port, socket);
