@@ -10,6 +10,7 @@
 #include <vector>
 #include <fstream>
 #include <chrono>
+#include <signal.h>
 
 
 template <typename T>
@@ -91,7 +92,7 @@ int put_val(int key, int val, std::string serverIP, int serverPort, int clientSo
 
     send(clientSocket, message.data(), message.size(), 0);
 
-    char buffer[1024] = { 0 };
+    char buffer[1] = { 0 };
     recv(clientSocket, buffer, sizeof(buffer), 0);
 
     // closing socket
@@ -107,8 +108,8 @@ int generateRandomInteger(int min, int max) {
 
 
 
-int main()
-{
+int main(){
+    signal(SIGPIPE, SIG_IGN); //stop killing server
     std::vector<std::string> processes = getProcesses("config.txt");
     int port = 1895;
     int operations = 1000;
@@ -119,16 +120,16 @@ int main()
     int failed_gets = 0;
 
     //start server here
-    pid_t pid = fork();
-    if (pid == 0){
-        //child
-        char* const args[] = {
-            (char*)"./server",
-            nullptr
-        };
-        execv("./server", args);
-        _exit(0);
-    }
+    // pid_t pid = fork();
+    // if (pid == 0){
+    //     //child
+    //     char* const args[] = {
+    //         (char*)"./server",
+    //         nullptr
+    //     };
+    //     execv("./server", args);
+    //     _exit(0);
+    // }
     
     // barrier
     std::vector<int> sockets;
@@ -154,10 +155,12 @@ int main()
             close(clientSocket);
         }
     }
+
+    std::cout << "Starting now" << std::endl;
     
     std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
     for(int i = 0; i < operations; i++){
-        // std::cout << i << std::endl;
+        std::cout << i << std::endl;
         int key = generateRandomInteger(1, 10);
         int index = key % processes.size();
         SERVER_IP = processes[index];

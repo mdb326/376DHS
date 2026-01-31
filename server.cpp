@@ -60,55 +60,71 @@ int main() {
     listen(server_fd, 5);
 
     int cnt = 0;
+    fd_set  master, readfds;
+    FD_ZERO(&master);
+    FD_SET(server_fd, &master);
+    int maxfd = server_fd;
     // accepting connection request
     while (true){
-        int clientSocket
-            = accept(server_fd, nullptr, nullptr);
+        readfds = master;
 
-        while(true){
-            char op;
-            recv_all(clientSocket, &op, 1);
-            cnt++;
-            // recieving data
-            if (op == 'G') {
-                //get
-                int net_key;
-                recv_all(clientSocket, &net_key, 4);
-                int key = ntohl(net_key);
+        if (select(maxfd +1, &readfds, nullptr, nullptr, nullptr) < 0){
+            break;
+        }
+        for(int i = 0; i <= maxfd; i++){
+            if(!FD_ISSET(i, &readfds)){
+                continue;
+            }
 
-                auto res = map.get(key);
+            if(i == server_fd){
+                int client = accept(server_fd, nullptr, nullptr);
+                FD_SET(client, &master);
+                maxfd = std::max(maxfd, client);
+            }
+            else{
+                char op;
+                int clientSocket = i;
+                recv_all(clientSocket, &op, 1);
+                cnt++;
+                // recieving data
+                if (op == 'G') {
+                    //get
+                    int net_key;
+                    recv_all(clientSocket, &net_key, 4);
+                    int key = ntohl(net_key);
 
-                if (res.size() == 0) {
-                    char zero = '0';
-                    send(clientSocket, &zero, 1, 0);
-                } else {
-                    char one = '1';;
-                    send(clientSocket, &one, 1, 0);
-                    int len = htonl(res.size());
-                    send(clientSocket, &len, sizeof(len), 0);
-                    send(clientSocket, res.data(), res.size(), 0);
+                    auto res = map.get(key);
+
+                    if (res.size() == 0) {
+                        char zero = '0';
+                        send(clientSocket, &zero, 1, 0);
+                    } else {
+                        char one = '1';;
+                        send(clientSocket, &one, 1, 0);
+                        int len = htonl(res.size());
+                        send(clientSocket, &len, sizeof(len), 0);
+                        send(clientSocket, res.data(), res.size(), 0);
+                    }
+                }
+                else if (op == 'P') {
+                    //put
+                    int net_key;
+                    recv_all(clientSocket, &net_key, 4);
+                    int key = ntohl(net_key);
+
+                    int net_len;
+                    recv_all(clientSocket, &net_len, 4);
+                    int len = ntohl(net_len);
+
+                    std::vector<uint8_t> value(len);
+                    recv_all(clientSocket, value.data(), len);
+
+                    bool ok = map.put(key, value);
+
+                    send(clientSocket, &ok, 1, 0);
                 }
             }
-            else if (op == 'P') {
-                //put
-                int net_key;
-                recv_all(clientSocket, &net_key, 4);
-                int key = ntohl(net_key);
-
-                int net_len;
-                recv_all(clientSocket, &net_len, 4);
-                int len = ntohl(net_len);
-
-                std::vector<uint8_t> value(len);
-                recv_all(clientSocket, value.data(), len);
-
-                bool ok = map.put(key, value);
-
-                send(clientSocket, &ok, 1, 0);
-            }
         }
-
-
 
 
         // closing the socket.
