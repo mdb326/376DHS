@@ -36,9 +36,12 @@ bool recv_all(int sock, void* buf, size_t len) {
 }
 
 int main() {
-    DHS map;
+    
     char type = '1';
-    // std::vector<std::string> processIPS = getProcesses("config.txt");
+    int operations = 1000;
+    int keys = 10;
+    std::vector<std::string> processIPS = getProcesses("config.txt", &operations, &keys);
+    DHSList map(keys / processIPS.size());
     // map.put(502, 15);
     //Cupid: 128.180.120.70
     int port = 1895;

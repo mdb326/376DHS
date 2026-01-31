@@ -117,8 +117,6 @@ int main(){
     int operations = 1000;
     int keys = 10;
     std::vector<std::string> processes = getProcesses("config.txt", &operations, &keys);
-    std::cout << operations << std::endl;
-    std::cout << keys << std::endl;
     int port = 1895;
     
     std::string SERVER_IP = processes[0];
@@ -196,12 +194,6 @@ int main(){
     std::chrono::duration<double> exec_time_i = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
     std::cout << "Finished in " << exec_time_i.count() << " Seconds" << std::endl;
     
-    // get_val(501, SERVER_IP, port);
-    // get_val(502, SERVER_IP, port);
-    // put_val(501, 500000, SERVER_IP, port);
-    // get_val(501, SERVER_IP, port);
-    // put_val(501, 500001, SERVER_IP, port);
-    // get_val(501, SERVER_IP, port);
 
     std::cout << "Successful Gets: " << successful_gets << std::endl;
     std::cout << "Failed Gets: " << failed_gets << std::endl;
