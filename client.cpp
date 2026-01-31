@@ -28,10 +28,14 @@ bool recv_all(int sock, void* buf, size_t len) {
     }
     return true;
 }
-std::vector<std::string> getProcesses(std::string filename){
+std::vector<std::string> getProcesses(std::string filename, int* operations, int* keys){
     std::ifstream config("config.txt");
     std::string line;
     std::vector<std::string> result;
+    std::getline(config, line);
+    *operations = std::stoi(line);
+    std::getline(config, line);
+    *keys = std::stoi(line);
 
     while (std::getline(config, line)) {
         if (line == "Servers:"){
@@ -110,9 +114,13 @@ int generateRandomInteger(int min, int max) {
 
 int main(){
     signal(SIGPIPE, SIG_IGN); //stop killing server
-    std::vector<std::string> processes = getProcesses("config.txt");
-    int port = 1895;
     int operations = 1000;
+    int keys = 10;
+    std::vector<std::string> processes = getProcesses("config.txt", &operations, &keys);
+    std::cout << operations << std::endl;
+    std::cout << keys << std::endl;
+    int port = 1895;
+    
     std::string SERVER_IP = processes[0];
     int successful_puts = 0;
     int failed_puts = 0;
@@ -160,8 +168,8 @@ int main(){
     
     std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
     for(int i = 0; i < operations; i++){
-        std::cout << i << std::endl;
-        int key = generateRandomInteger(1, 10);
+        // std::cout << i << std::endl;
+        int key = generateRandomInteger(1, keys);
         int index = key % processes.size();
         SERVER_IP = processes[index];
         int socket = sockets[index];
