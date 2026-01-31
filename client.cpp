@@ -168,6 +168,7 @@ int main(){
     for(int i = 0; i < operations; i++){
         // std::cout << i << std::endl;
         int key = generateRandomInteger(1, keys);
+        std::cout << key << std::endl;
         int index = key % processes.size();
         SERVER_IP = processes[index];
         int socket = sockets[index];
@@ -191,6 +192,11 @@ int main(){
         }
     }
     std::chrono::high_resolution_clock::time_point t2 = std::chrono::high_resolution_clock::now();
+    std::vector<uint8_t> message = {'C'};
+    for (auto process : sockets){
+        send(process, message.data(), message.size(), 0);
+    }
+    
     std::chrono::duration<double> exec_time_i = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
     std::cout << "Finished in " << exec_time_i.count() << " Seconds" << std::endl;
     

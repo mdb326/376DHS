@@ -3,17 +3,22 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
-#include "DHS.hpp"
+// #include "DHS.hpp"
 #include <fstream>
 #include <vector>
 #include <cstring>
 #include "serialization.cpp"
+#include "DHSList.hpp"
 
 
-std::vector<std::string> getProcesses(std::string filename){
+std::vector<std::string> getProcesses(std::string filename, int* operations, int* keys){
     std::ifstream config("config.txt");
     std::string line;
     std::vector<std::string> result;
+    std::getline(config, line);
+    *operations = std::stoi(line);
+    std::getline(config, line);
+    *keys = std::stoi(line);
 
     while (std::getline(config, line)) {
         if (line == "Servers:"){
@@ -87,7 +92,12 @@ int main() {
             else{
                 char op;
                 int clientSocket = i;
-                recv_all(clientSocket, &op, 1);
+                if (!recv_all(clientSocket, &op, 1)) {
+    close(clientSocket);
+    FD_CLR(clientSocket, &master);
+    continue;
+}
+                // recv_all(clientSocket, &op, 1);
                 cnt++;
                 // recieving data
                 if (op == 'G') {
@@ -95,6 +105,7 @@ int main() {
                     int net_key;
                     recv_all(clientSocket, &net_key, 4);
                     int key = ntohl(net_key);
+                    std::cout << key << std::endl;
 
                     auto res = map.get(key);
 
@@ -117,6 +128,7 @@ int main() {
                     int net_key;
                     recv_all(clientSocket, &net_key, 4);
                     int key = ntohl(net_key);
+                    std::cout << key << std::endl;
 
                     int net_len;
                     recv_all(clientSocket, &net_len, 4);
@@ -128,6 +140,10 @@ int main() {
                     bool ok = map.put(key, value);
 
                     send(clientSocket, &ok, 1, 0);
+                }
+                else if (op == 'C'){
+                    close(clientSocket);
+                    FD_CLR(clientSocket, &master);
                 }
             }
         }
