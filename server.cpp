@@ -99,11 +99,14 @@ int main() {
                         char zero = '0';
                         send(clientSocket, &zero, 1, 0);
                     } else {
-                        char one = '1';;
-                        send(clientSocket, &one, 1, 0);
+                        std::vector<uint8_t> msg;
                         int len = htonl(res.size());
-                        send(clientSocket, &len, sizeof(len), 0);
-                        send(clientSocket, res.data(), res.size(), 0);
+                        msg.reserve(1 + sizeof(len) + res.size());
+                        msg.push_back('1');
+                        uint8_t* p = reinterpret_cast<uint8_t*>(&len);
+                        msg.insert(msg.end(), p, p + sizeof(len));
+                        msg.insert(msg.end(), res.begin(), res.end());
+                        send(clientSocket, msg.data(), msg.size(), 0);
                     }
                 }
                 else if (op == 'P') {
