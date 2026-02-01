@@ -3,12 +3,12 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
-#include "DHS.hpp"
+// #include "DHS.hpp"
 #include <fstream>
 #include <vector>
 #include <cstring>
 #include "serialization.cpp"
-// #include "DHSList.hpp"
+#include "DHSList.hpp"
 
 
 std::vector<std::string> getProcesses(std::string filename, int* operations, int* keys){
@@ -46,8 +46,8 @@ int main() {
     int operations = 1000;
     int keys = 10;
     std::vector<std::string> processIPS = getProcesses("config.txt", &operations, &keys);
-    // DHSList map(keys / processIPS.size() + 1);
-    DHS map;
+    DHSList map(keys / processIPS.size() + 1);
+    // DHS map;
     // map.put(502, 15);
     //Cupid: 128.180.120.70
     int port = 1895;

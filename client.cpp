@@ -76,7 +76,7 @@ int get_val(int key, std::string serverIP, int serverPort, int clientSocket){
 
     return ntohl(result);
 }
-int put_val(int key, int val, std::string serverIP, int serverPort, int clientSocket){
+int put_val(int key, std::string val, std::string serverIP, int serverPort, int clientSocket){
     std::vector<uint8_t> message;
     message.reserve(13);
     //P
@@ -87,13 +87,11 @@ int put_val(int key, int val, std::string serverIP, int serverPort, int clientSo
     std::memcpy(buf, &net_key, 4);
     message.insert(message.end(), buf, buf + 4);
     //length(4)
-    int len = htonl(4);
+    int len = htonl(val.length());
     std::memcpy(buf, &len, 4);
     message.insert(message.end(), buf, buf + 4);
     //val
-    int net_val = htonl(val);
-    std::memcpy(buf, &net_val, 4);
-    message.insert(message.end(), buf, buf + 4);
+    message.insert(message.end(), val.begin(), val.end());
 
     send(clientSocket, message.data(), message.size(), 0);
 
@@ -116,6 +114,21 @@ int generateRandomNormalInteger(int min, int max) {
     std::normal_distribution<> distrib(max/2, max/4); // Create uniform int dist between min and max (inclusive)
 
     return std::clamp(std::lround(distrib(gen)), static_cast<long int>(min), static_cast<long int>(max)); // Generate random number from the normal int dist (inclusive)
+}
+float generateRandomFloat(int min, int max){
+    thread_local static std::random_device rd; // creates random device (unique to each thread to prevent race cons) (static to avoid reinitialization)
+    thread_local static std::mt19937 gen(rd());  // Seeding the RNG (unique to each thread to prevent race cons) (static to avoid reinitialization)
+    std::uniform_real_distribution<float> distrib(min, max); // Create uniform int dist between min and max (inclusive)
+
+    return distrib(gen);
+}
+std::string generateRandomString(int length){
+    std::string res = "";
+    const std::string characters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()";
+    for(int i =0; i < length; i++){
+        res += characters[generateRandomInteger(0, 58)];
+    }
+    return res;
 }
 
 
@@ -175,13 +188,13 @@ int main(){
     std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
     for(int i = 0; i < operations; i++){
         // std::cout << i << std::endl;
-        int key = generateRandomNormalInteger(1, keys);
+        int key = generateRandomInteger(1, keys);
         // std::cout << key << std::endl;
         int index = key % processes.size();
         SERVER_IP = processes[index];
         int socket = sockets[index];
         if (generateRandomInteger(1,5) == 1){
-            int val = generateRandomInteger(INT_MIN, INT_MAX);
+            std::string val = generateRandomString(200);
             int res = put_val(key, val, SERVER_IP, port, socket);
             if(res){
                 successful_puts++;
