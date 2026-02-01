@@ -93,10 +93,11 @@ int main() {
                 char op;
                 int clientSocket = i;
                 if (!recv_all(clientSocket, &op, 1)) {
-    close(clientSocket);
-    FD_CLR(clientSocket, &master);
-    continue;
-}
+                    //check if dead
+                    close(clientSocket);
+                    FD_CLR(clientSocket, &master);
+                    continue;
+                }
                 // recv_all(clientSocket, &op, 1);
                 cnt++;
                 // recieving data
