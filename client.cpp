@@ -168,7 +168,7 @@ int main(){
     for(int i = 0; i < operations; i++){
         // std::cout << i << std::endl;
         int key = generateRandomInteger(1, keys);
-        std::cout << key << std::endl;
+        // std::cout << key << std::endl;
         int index = key % processes.size();
         SERVER_IP = processes[index];
         int socket = sockets[index];
