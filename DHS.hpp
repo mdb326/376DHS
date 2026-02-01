@@ -23,8 +23,9 @@ std::vector<uint8_t> DHS::get(int key){
     readMutex.lock_shared();
     if (m.count(key)){
         // std::cout <<"Bucket: "<< m.bucket(key) << std::endl;
+        std::vector<uint8_t> val = m[key];
         readMutex.unlock_shared();
-        return m[key];
+        return val;
     }
     readMutex.unlock_shared();
     return std::vector<uint8_t>();

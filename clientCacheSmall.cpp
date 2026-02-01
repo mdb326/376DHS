@@ -110,6 +110,13 @@ int generateRandomInteger(int min, int max) {
 
     return distrib(gen); // Generate random number from the uniform int dist (inclusive)
 }
+int generateRandomNormalInteger(int min, int max) {
+    thread_local static std::random_device rd; // creates random device (unique to each thread to prevent race cons) (static to avoid reinitialization)
+    thread_local static std::mt19937 gen(rd());  // Seeding the RNG (unique to each thread to prevent race cons) (static to avoid reinitialization)
+    std::normal_distribution<> distrib(max/2, max/4); // Create uniform int dist between min and max (inclusive)
+
+    return std::clamp(std::lround(distrib(gen)), static_cast<long int>(min), static_cast<long int>(max)); // Generate random number from the normal int dist (inclusive)
+}
 
 
 
@@ -121,12 +128,12 @@ int main(){
     int port = 1895;
 
     //want mem locality
-    int cacheSize = keys/10;
+    int cacheSize = keys/4;
     std::vector<int> cache;
     cache.reserve(cacheSize);
     std::vector<int> valCache;
     valCache.reserve(cacheSize);
-    int lastUsed = -1;
+    int lastUsed = 0;
     
     std::string SERVER_IP = processes[0];
     int successful_puts = 0;
@@ -176,18 +183,16 @@ int main(){
     std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
     for(int i = 0; i < operations; i++){
         // std::cout << i << std::endl;
-        int key = generateRandomInteger(1, keys);
+        int key = generateRandomNormalInteger(1, keys);
         // std::cout << key << std::endl;
         int index = key % processes.size();
         SERVER_IP = processes[index];
         int socket = sockets[index];
         if (generateRandomInteger(1,5) == 1){
             int val = generateRandomInteger(INT_MIN, INT_MAX);
-            for(int j = 0; j < cache.size(); j++){
-                if (cache[j] == key){
-                    failed_puts++;
-                    continue;
-                }
+            if (cache[key % cacheSize] == key){
+                failed_puts++;
+                continue;
             }
             int res = put_val(key, val, SERVER_IP, port, socket);
             if(res){
@@ -196,12 +201,8 @@ int main(){
                     valCache.push_back(key);
                 }
                 else{
-                    cache[lastUsed] = key;
-                    valCache[lastUsed] = val;
-                    lastUsed++;
-                    if (lastUsed == cache.size()){
-                        lastUsed = 0;
-                    }
+                    cache[key % cacheSize] = key;
+                    valCache[key % cacheSize] = val;
                 }
                 successful_puts++;
             }
@@ -210,25 +211,18 @@ int main(){
             }
         }
         else{
-            for(int j = 0; j < cache.size(); j++){
-                if (cache[j] == key){
-                    int result = valCache[j];
-                    successful_gets++;
-                    continue;
-                }
+            if (cache[key % cacheSize] == key){
+                int val = valCache[key % cacheSize];
+                successful_gets++;
+                continue;
             }
             int res = get_val(key, SERVER_IP, port, socket);
             if (res == NULL){
                 failed_gets++;
             }
             else{
-                successful_gets++;
-                cache[lastUsed] = key;
-                valCache[lastUsed] = res;
-                lastUsed++;
-                if (lastUsed == cache.size()){
-                    lastUsed = 0;
-                }
+                cache[key % cacheSize] = key;
+                valCache[key % cacheSize] = res;
             }
         }
     }
