@@ -44,9 +44,10 @@ bool DHSList::put(int key, std::vector<uint8_t> val){
     if (!puts[index]){
         readMutex[index]->unlock();
         puts[index] = true;
-        return false;
+        m[index] = val;
+        return true;
     }
     m[index] = val;
     readMutex[index]->unlock();
-    return true;
+    return false;
 }

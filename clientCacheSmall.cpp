@@ -190,7 +190,7 @@ int main(){
                 }
             }
             int res = put_val(key, val, SERVER_IP, port, socket);
-            if(!res){
+            if(res){
                 if(cache.size() < cacheSize){
                     cache.push_back(key);
                     valCache.push_back(key);
