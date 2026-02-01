@@ -11,6 +11,7 @@
 #include <fstream>
 #include <chrono>
 #include <signal.h>
+#include <algorithm>
 
 
 template <typename T>
@@ -109,6 +110,13 @@ int generateRandomInteger(int min, int max) {
 
     return distrib(gen); // Generate random number from the uniform int dist (inclusive)
 }
+int generateRandomNormalInteger(int min, int max) {
+    thread_local static std::random_device rd; // creates random device (unique to each thread to prevent race cons) (static to avoid reinitialization)
+    thread_local static std::mt19937 gen(rd());  // Seeding the RNG (unique to each thread to prevent race cons) (static to avoid reinitialization)
+    std::normal_distribution<> distrib(max/2, max/4); // Create uniform int dist between min and max (inclusive)
+
+    return std::clamp(std::lround(distrib(gen)), static_cast<long int>(min), static_cast<long int>(max)); // Generate random number from the normal int dist (inclusive)
+}
 
 
 
@@ -167,7 +175,7 @@ int main(){
     std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
     for(int i = 0; i < operations; i++){
         // std::cout << i << std::endl;
-        int key = generateRandomInteger(1, keys);
+        int key = generateRandomNormalInteger(1, keys);
         // std::cout << key << std::endl;
         int index = key % processes.size();
         SERVER_IP = processes[index];

@@ -223,6 +223,7 @@ int main(){
             else{
                 cache[key % cacheSize] = key;
                 valCache[key % cacheSize] = res;
+                successful_gets++;
             }
         }
     }
