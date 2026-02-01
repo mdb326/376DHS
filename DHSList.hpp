@@ -27,7 +27,7 @@ DHSList::DHSList(int _size){
 }
 
 std::vector<uint8_t> DHSList::get(int key){
-    int index = key % size;
+    int index = key / size;
     readMutex[index]->lock_shared();
     if (puts[index]){
         auto res = m[index];
@@ -39,7 +39,7 @@ std::vector<uint8_t> DHSList::get(int key){
 }
 
 bool DHSList::put(int key, std::vector<uint8_t> val){
-    int index = key % size;
+    int index = key / size;
     readMutex[index]->lock();
     if (!puts[index]){
         readMutex[index]->unlock();

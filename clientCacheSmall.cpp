@@ -121,7 +121,7 @@ int main(){
     int port = 1895;
 
     //want mem locality
-    int cacheSize = keys/2;
+    int cacheSize = keys/10;
     std::vector<int> cache;
     cache.reserve(cacheSize);
     std::vector<int> valCache;
@@ -217,11 +217,18 @@ int main(){
                     continue;
                 }
             }
-            if (get_val(key, SERVER_IP, port, socket) == NULL){
+            int res = get_val(key, SERVER_IP, port, socket);
+            if (res == NULL){
                 failed_gets++;
             }
             else{
                 successful_gets++;
+                cache[lastUsed] = key;
+                valCache[lastUsed] = res;
+                lastUsed++;
+                if (lastUsed == cache.size()){
+                    lastUsed = 0;
+                }
             }
         }
     }

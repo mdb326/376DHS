@@ -46,7 +46,7 @@ int main() {
     int operations = 1000;
     int keys = 10;
     std::vector<std::string> processIPS = getProcesses("config.txt", &operations, &keys);
-    DHSList map(keys / processIPS.size());
+    DHSList map(keys / processIPS.size() + 1);
     // map.put(502, 15);
     //Cupid: 128.180.120.70
     int port = 1895;
@@ -90,6 +90,7 @@ int main() {
                 maxfd = std::max(maxfd, client);
             }
             else{
+                // std::cout << cnt << std::endl;
                 char op;
                 int clientSocket = i;
                 if (!recv_all(clientSocket, &op, 1)) {

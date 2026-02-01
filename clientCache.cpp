@@ -173,20 +173,20 @@ int main(){
     for(int i = 0; i < operations; i++){
         // std::cout << i << std::endl;
         int key = generateRandomInteger(1, keys);
-        std::cout << key << std::endl;
+        // std::cout << key << std::endl;
         int index = key % processes.size();
         SERVER_IP = processes[index];
         int socket = sockets[index];
         if (generateRandomInteger(1,5) == 1){
             int val = generateRandomInteger(INT_MIN, INT_MAX);
-            if(alreadyPut[key]){
+            if(alreadyPut[key-1]){
                 failed_puts++;
                 continue;
             }
             int res = put_val(key, val, SERVER_IP, port, socket);
             if(res){
-                alreadyPut[key] = true;
-                cache[key] = val;
+                alreadyPut[key-1] = true;
+                cache[key-1] = val;
                 successful_puts++;
             }
             else{
@@ -194,16 +194,19 @@ int main(){
             }
         }
         else{
-            if (alreadyPut[key]){
-                int result = cache[key];
+            if (alreadyPut[key-1]){
+                int result = cache[key-1];
                 successful_gets++;
                 continue;
             }
-            if (get_val(key, SERVER_IP, port, socket) == NULL){
+            int res = get_val(key, SERVER_IP, port, socket);
+            if (res == NULL){
                 failed_gets++;
             }
             else{
                 successful_gets++;
+                cache[key-1] = res;
+                alreadyPut[key-1] = res;
             }
         }
     }
