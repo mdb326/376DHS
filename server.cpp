@@ -65,7 +65,7 @@ int main() {
          sizeof(serverAddress));
 
     // listening to the assigned socket
-    listen(server_fd, 5);
+    listen(server_fd, 10);
 
     int cnt = 0;
     fd_set  master, readfds;

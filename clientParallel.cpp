@@ -11,7 +11,13 @@
 #include <fstream>
 #include <chrono>
 #include <signal.h>
-#include <algorithm>
+#include <thread>
+
+
+const int THREADS = 3;
+int successful_gets[THREADS], successful_puts[THREADS], failed_gets[THREADS], failed_puts[THREADS];
+std::chrono::duration<double> times[THREADS];
+int port = 1895;
 
 
 template <typename T>
@@ -111,6 +117,71 @@ int generateRandomInteger(int min, int max) {
     return distrib(gen); // Generate random number from the uniform int dist (inclusive)
 }
 
+void doOperations(int operations, std::vector<std::string> processes, int index, int keys){
+    std::string SERVER_IP = processes[0];
+    std::vector<int> sockets;
+    sockets.reserve(processes.size());
+    for (std::string process : processes){
+        std::cout << process << std::endl;
+        while(true){
+            int clientSocket = socket(AF_INET, SOCK_STREAM, 0);
+
+            sockaddr_in serverAddress{};
+            serverAddress.sin_family = AF_INET;
+            serverAddress.sin_port = htons(port);
+
+            if (inet_pton(AF_INET, process.c_str(), &serverAddress.sin_addr) <= 0) {
+                std::cerr << "Invalid IP address" << std::endl;
+                return;
+            }
+
+            if (connect(clientSocket, (struct sockaddr*)&serverAddress, sizeof(serverAddress)) == 0) {
+                sockets.push_back(clientSocket);
+                break;
+            }
+            close(clientSocket);
+        }
+    }
+
+    std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
+
+    for(int i = 0; i < operations; i++){
+        // std::cout << i << std::endl;
+        int key = generateRandomInteger(1, keys);
+        // std::cout << key << std::endl;
+        int index = key % processes.size();
+        SERVER_IP = processes[index];
+        int socket = sockets[index];
+        if (generateRandomInteger(1,5) == 1){
+            int val = generateRandomInteger(INT_MIN, INT_MAX);
+            int res = put_val(key, val, SERVER_IP, port, socket);
+            if(res){
+                successful_puts[index]++;
+            }
+            else{
+                failed_puts[index]++;
+            }
+        }
+        else{
+            if (get_val(key, SERVER_IP, port, socket) == NULL){
+                failed_gets[index]++;
+            }
+            else{
+                successful_gets[index]++;
+            }
+        }
+    }
+    std::chrono::high_resolution_clock::time_point t2 = std::chrono::high_resolution_clock::now();
+    std::vector<uint8_t> message = {'C'};
+    for (auto process : sockets){
+        send(process, message.data(), message.size(), 0);
+    }
+    
+    std::chrono::duration<double> exec_time_i = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
+    times[index] = exec_time_i; 
+    std::cout << "Finished in " << exec_time_i.count() << " Seconds" << std::endl;
+}
+
 
 
 int main(){
@@ -118,21 +189,12 @@ int main(){
     int operations = 1000;
     int keys = 10;
     std::vector<std::string> processes = getProcesses("config.txt", &operations, &keys);
-    int port = 1895;
-
-    //want mem locality
-    int cacheSize = keys/2;
-    std::vector<int> cache;
-    cache.reserve(cacheSize);
-    std::vector<int> valCache;
-    valCache.reserve(cacheSize);
-    int lastUsed = -1;
+    int successful_puts_total = 0;
+    int failed_puts_total = 0;
+    int successful_gets_total = 0;
+    int failed_gets_total = 0;
     
     std::string SERVER_IP = processes[0];
-    int successful_puts = 0;
-    int failed_puts = 0;
-    int successful_gets = 0;
-    int failed_gets = 0;
 
     //start server here
     // pid_t pid = fork();
@@ -147,98 +209,41 @@ int main(){
     // }
     
     // barrier
-    std::vector<int> sockets;
-    sockets.reserve(processes.size());
-    for (std::string process : processes){
-        std::cout << process << std::endl;
-        while(true){
-            int clientSocket = socket(AF_INET, SOCK_STREAM, 0);
-
-            sockaddr_in serverAddress{};
-            serverAddress.sin_family = AF_INET;
-            serverAddress.sin_port = htons(port);
-
-            if (inet_pton(AF_INET, process.c_str(), &serverAddress.sin_addr) <= 0) {
-                std::cerr << "Invalid IP address" << std::endl;
-                return NULL;
-            }
-
-            if (connect(clientSocket, (struct sockaddr*)&serverAddress, sizeof(serverAddress)) == 0) {
-                sockets.push_back(clientSocket);
-                break;
-            }
-            close(clientSocket);
-        }
-    }
-
-    std::cout << "Starting now" << std::endl;
-    
-    std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
-    for(int i = 0; i < operations; i++){
-        // std::cout << i << std::endl;
-        int key = generateRandomInteger(1, keys);
-        // std::cout << key << std::endl;
-        int index = key % processes.size();
-        SERVER_IP = processes[index];
-        int socket = sockets[index];
-        if (generateRandomInteger(1,5) == 1){
-            int val = generateRandomInteger(INT_MIN, INT_MAX);
-            for(int j = 0; j < cache.size(); j++){
-                if (cache[j] == key){
-                    failed_puts++;
-                    continue;
-                }
-            }
-            int res = put_val(key, val, SERVER_IP, port, socket);
-            if(res){
-                if(cache.size() < cacheSize){
-                    cache.push_back(key);
-                    valCache.push_back(key);
-                }
-                else{
-                    cache[lastUsed] = key;
-                    valCache[lastUsed] = val;
-                    lastUsed++;
-                    if (lastUsed == cache.size()){
-                        lastUsed = 0;
-                    }
-                }
-                successful_puts++;
-            }
-            else{
-                failed_puts++;
-            }
-        }
-        else{
-            for(int j = 0; j < cache.size(); j++){
-                if (cache[j] == key){
-                    int result = valCache[j];
-                    successful_gets++;
-                    continue;
-                }
-            }
-            if (get_val(key, SERVER_IP, port, socket) == NULL){
-                failed_gets++;
-            }
-            else{
-                successful_gets++;
-            }
-        }
-    }
-    std::chrono::high_resolution_clock::time_point t2 = std::chrono::high_resolution_clock::now();
-    std::vector<uint8_t> message = {'C'};
-    for (auto process : sockets){
-        send(process, message.data(), message.size(), 0);
-    }
-    
-    std::chrono::duration<double> exec_time_i = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
-    std::cout << "Finished in " << exec_time_i.count() << " Seconds" << std::endl;
     
 
-    std::cout << "Successful Gets: " << successful_gets << std::endl;
-    std::cout << "Failed Gets: " << failed_gets << std::endl;
-    std::cout << "Successful Puts: " << successful_puts << std::endl;
-    std::cout << "Failed Puts: " << failed_puts << std::endl;
+    // std::cout << "Starting now" << std::endl;
+    std::thread threads[THREADS];
+    
+    for (int i = 0; i < THREADS; i++){
+        successful_gets[i] = 0;
+        successful_puts[i] = 0;
+        failed_puts[i] = 0;
+        failed_gets[i] = 0;
+    }
+
+
+    for(int i = 0; i < THREADS; i++){
+        threads[i] = std::thread(doOperations, operations/THREADS, processes, i, keys);
+    }
+    for(int i = 0; i < THREADS; i++){
+        threads[i].join();
+    }
+    double maxTime = 0.0;
+    for (int i = 0; i < THREADS; i++){
+        successful_gets_total += successful_gets[i];
+        failed_gets_total += failed_gets[i];
+        successful_puts_total += successful_puts[i];
+        failed_puts_total += failed_puts[i];
+        if(times[i].count() > maxTime){
+            maxTime = times[i].count();
+        }
+    }
+    
+    std::cout << "Total time "<< maxTime << std::endl;
+    std::cout << "Successful Gets: " << successful_gets_total << std::endl;
+    std::cout << "Failed Gets: " << failed_gets_total << std::endl;
+    std::cout << "Successful Puts: " << successful_puts_total << std::endl;
+    std::cout << "Failed Puts: " << failed_puts_total << std::endl;
 
     return 0;
 }
