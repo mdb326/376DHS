@@ -108,7 +108,7 @@ int main() {
                     int net_key;
                     recv_all(clientSocket, &net_key, 4);
                     int key = ntohl(net_key);
-                    std::cout << key << std::endl;
+                    // std::cout << key << std::endl;
 
                     auto res = map.get(key);
 

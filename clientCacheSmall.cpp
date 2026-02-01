@@ -128,7 +128,7 @@ int main(){
     int port = 1895;
 
     //want mem locality
-    int cacheSize = keys/4;
+    int cacheSize = keys/10;
     std::vector<int> cache;
     cache.reserve(cacheSize);
     std::vector<int> valCache;
