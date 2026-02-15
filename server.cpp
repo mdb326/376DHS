@@ -156,6 +156,30 @@ int main() {
                     close(clientSocket);
                     FD_CLR(clientSocket, &master);
                 }
+                else if(op == 'L'){
+                    //lock this key place
+                    int net_key;
+                    recv_all(clientSocket, &net_key, 4);
+                    int key = ntohl(net_key);
+                    int netoperation;
+                    recv_all(clientSocket, &netoperation, 4);
+                    int operation = ntohl(netoperation);
+                    bool ok = map.getLock(key, operation);
+                    //send back ack
+
+                    send(clientSocket, &ok, 1, 0);
+                }
+                else if (op == 'U'){
+                    int net_key;
+                    recv_all(clientSocket, &net_key, 4);
+                    int key = ntohl(net_key);
+                    int netoperation;
+                    recv_all(clientSocket, &netoperation, 4);
+                    int operation = ntohl(netoperation);
+                    bool ok = map.unLock(key, operation);
+                    //send back ack
+                    send(clientSocket, &ok, 1, 0);
+                }
             }
         }
 
