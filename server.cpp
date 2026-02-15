@@ -40,9 +40,36 @@ bool recv_all(int sock, void* buf, size_t len) {
     }
     return true;
 }
+int connect_to_server(const std::string& ip, int port) {
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (sock < 0) {
+        perror("socket");
+        return -1;
+    }
 
-int main() {
-    
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(port);
+
+    if (inet_pton(AF_INET, ip.c_str(), &addr.sin_addr) <= 0) {
+        perror("inet_pton");
+        close(sock);
+        return -1;
+    }
+
+    if (connect(sock, (sockaddr*)&addr, sizeof(addr)) < 0) {
+        perror("connect");
+        close(sock);
+        return -1;
+    }
+
+    std::cout << "Connected to server: " << ip << std::endl;
+    return sock;
+}
+
+
+int main(int argc, char* argv[]) {
+    int myIndex = std::stoi(argv[1]);
     char type = '1';
     int operations = 1000;
     int keys = 10;
@@ -73,15 +100,29 @@ int main() {
     bind(server_fd, (struct sockaddr*)&serverAddress,
          sizeof(serverAddress));
 
-    // listening to the assigned socket
-    listen(server_fd, 10);
-    //need to connect to all other servers too
-
     int cnt = 0;
     fd_set  master, readfds;
     FD_ZERO(&master);
     FD_SET(server_fd, &master);
     int maxfd = server_fd;
+
+    // listening to the assigned socket
+    listen(server_fd, 10);
+    //need to connect to all other servers too
+    std::string myIP = processIPS[myIndex];
+
+    for (const auto& ip : processIPS) {
+        while (true) {
+            int sock = connect_to_server(ip, port);
+            if (sock >= 0) {
+                FD_SET(sock, &master);
+                maxfd = std::max(maxfd, sock);
+                break;
+            }
+            sleep(1);
+        }
+    }
+
     // accepting connection request
     while (true){
         readfds = master;
@@ -139,7 +180,7 @@ int main() {
                 }
                 else if (op == 'P') {
                     //put
-                    operationCounter++;
+                    operationCounter++; //gonna have to send this with teh first digit identifying the nodeh
                     int net_key;
                     recv_all(clientSocket, &net_key, 4);
                     int key = ntohl(net_key);
