@@ -69,6 +69,7 @@ int connect_to_server(const std::string& ip, int port) {
     return sock;
 }
 std::vector<int> getReplicationMapping(int key, int myIndex, int replicationIndex, int processQuantity){
+    //simple atm
     std::vector<int> res;
     if (replicationIndex == 1){
         return res;
@@ -84,6 +85,34 @@ std::vector<int> getReplicationMapping(int key, int myIndex, int replicationInde
 }
 bool sendLock(int sock, int key, int operation) {
     char op_code = 'L';
+    if (send(sock, &op_code, 1, 0) != 1) {
+        std::cerr << "Failed to send operation code\n";
+        return false;
+    }
+
+    uint32_t net_key = htonl(key);
+    uint32_t net_operation = htonl(operation);
+
+    if (send(sock, &net_key, sizeof(net_key), 0) != sizeof(net_key)) {
+        std::cerr << "Failed to send key\n";
+        return false;
+    }
+
+    if (send(sock, &net_operation, sizeof(net_operation), 0) != sizeof(net_operation)) {
+        std::cerr << "Failed to send operation\n";
+        return false;
+    }
+
+    uint8_t ack;
+    if (!recv_all(sock, &ack, 1)) {
+        std::cerr << "Failed to receive lock ack\n";
+        return false;
+    }
+
+    return ack != 0;
+}
+bool sendUnlock(int sock, int key, int operation) {
+    char op_code = 'U';
     if (send(sock, &op_code, 1, 0) != 1) {
         std::cerr << "Failed to send operation code\n";
         return false;
@@ -162,8 +191,9 @@ for (size_t i = 0; i < processIPS.size(); i++) {
     const auto& ip = processIPS[i];
     if (ip == myIP){
         outgoingServerSockets.push_back(0); //placeholder to keep ids matching
+        continue; // skip self
     } 
-    continue; // skip self
+    
 
     while (true) {
         int sock = connect_to_server(ip, port);
@@ -207,6 +237,7 @@ for (size_t i = 0; i < processIPS.size(); i++) {
                 // recv_all(clientSocket, &op, 1);
                 cnt++;
                 // recieving data
+                std::cout << op << std::endl;
                 if (op == 'G') {
                     //get
                     operationCounter++; //this is another operation but doesn't affect sole locking, gonna need to 
@@ -255,16 +286,19 @@ for (size_t i = 0; i < processIPS.size(); i++) {
                     map.getLock(key, currentOperation); 
                     bool ok = map.put(key, value);
                     for(auto nodeID : replications){
-                        while(sendLock(outgoingServerSockets[nodeID], key, currentOperation)){
+                        std::cout << nodeID << std::endl;
+                        while(!sendLock(outgoingServerSockets[nodeID], key, currentOperation)){
                             //just need to keep trying atm, we assume no failures
                         }
                     }
                     // for(auto nodeID : replications){
                     //     sendAdd(processIPS[nodeID]);
                     // }
-                    // for(auto nodeID : replications){
-                    //     sendUnlock(processIPS[nodeID]);
-                    // }
+                    for(auto nodeID : replications){
+                        while(!sendUnlock(outgoingServerSockets[nodeID], key, currentOperation)){
+                            //just need to keep trying atm, we assume no failures
+                        }
+                    }
 
                     send(clientSocket, &ok, 1, 0);
                 }

@@ -64,9 +64,11 @@ bool DHSList::getLock(int key, int operation){ //, std::string serverIP
     int index = key % size;
     serverLockingsLocks[index]->lock_shared();
     if(serverLockings[index] == operation){
+        serverLockingsLocks[index]->unlock();
         return true;
     }
     readMutex[index]->lock();
+    serverLockingsLocks[index]->unlock(); //cant upgrade apparently
     serverLockingsLocks[index]->lock();
     serverLockings[index] = operation;
     serverLockingsLocks[index]->unlock();
