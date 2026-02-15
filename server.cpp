@@ -46,6 +46,12 @@ int main() {
     int operations = 1000;
     int keys = 10;
     std::vector<std::string> processIPS = getProcesses("config.txt", &operations, &keys);
+    std::vector<bool> locksHeld; //which locks we currently have
+    std::vector<std::unique_ptr<std::shared_mutex>> lockLocks; //lock the thing to say if we have a lock
+    for (int i = 0; i < processIPS.size(); i++){
+        lockLocks.emplace_back(std::make_unique<std::shared_mutex>());
+    }
+    locksHeld.resize(processIPS.size(), false);
     DHSList map(keys / processIPS.size() + 1);
     // DHS map;
     // map.put(502, 15);
@@ -67,6 +73,7 @@ int main() {
 
     // listening to the assigned socket
     listen(server_fd, 10);
+    //need to connect to all other servers too
 
     int cnt = 0;
     fd_set  master, readfds;
