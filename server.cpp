@@ -10,6 +10,9 @@
 #include "serialization.cpp"
 #include "DHSList.hpp"
 #include <atomic>
+#include <algorithm>
+#include <thread>
+#include <mutex>
 
 
 std::vector<std::string> getProcesses(std::string filename, int* operations, int* keys, int* replication){
@@ -71,9 +74,7 @@ int connect_to_server(const std::string& ip, int port) {
 std::vector<int> getReplicationMapping(int key, int myIndex, int replicationIndex, int processQuantity){
     //simple atm
     std::vector<int> res;
-    if (replicationIndex == 1){
-        return res;
-    }
+    res.push_back(myIndex);
     for(int i = 0; i < replicationIndex-1; i++){
         myIndex++;
         if (myIndex >= processQuantity){
@@ -81,6 +82,8 @@ std::vector<int> getReplicationMapping(int key, int myIndex, int replicationInde
         }
         res.push_back(myIndex);
     }
+    //ensure consistent locking order
+    std::sort(res.begin(), res.end());
     return res;
 }
 bool sendLock(int sock, int key, int operation) {
@@ -185,27 +188,28 @@ int main(int argc, char* argv[]) {
     //need to connect to all other servers too
     std::string myIP = processIPS[myIndex];
 
-    std::vector<int> outgoingServerSockets; // index matches processIPS
+    // std::vector<int> outgoingServerSockets; // index matches processIPS
+    std::vector<std::mutex> socketMutexes(processIPS.size());
 
-for (size_t i = 0; i < processIPS.size(); i++) {
-    const auto& ip = processIPS[i];
-    if (ip == myIP){
-        outgoingServerSockets.push_back(0); //placeholder to keep ids matching
-        continue; // skip self
-    } 
-    
+    // for (size_t i = 0; i < processIPS.size(); i++) {
+    //     const auto& ip = processIPS[i];
+    //     if (ip == myIP){
+    //         outgoingServerSockets.push_back(0); //placeholder to keep ids matching
+    //         continue; // skip self
+    //     } 
+        
 
-    while (true) {
-        int sock = connect_to_server(ip, port);
-        if (sock >= 0) {
-            FD_SET(sock, &master);
-            maxfd = std::max(maxfd, sock);
-            outgoingServerSockets.push_back(sock);
-            break;
-        }
-        sleep(1);
-    }
-}
+    //     while (true) {
+    //         int sock = connect_to_server(ip, port);
+    //         if (sock >= 0) {
+    //             FD_SET(sock, &master);
+    //             maxfd = std::max(maxfd, sock);
+    //             outgoingServerSockets.push_back(sock);
+    //             break;
+    //         }
+    //         sleep(1);
+    //     }
+    // }
 
     // accepting connection request
     while (true){
@@ -229,45 +233,48 @@ for (size_t i = 0; i < processIPS.size(); i++) {
                 char op;
                 int clientSocket = i;
                 if (!recv_all(clientSocket, &op, 1)) {
-                    //check if dead
+                    std::cout << "recv_all failed for socket " << clientSocket << std::endl;
                     close(clientSocket);
                     FD_CLR(clientSocket, &master);
                     continue;
                 }
-                // recv_all(clientSocket, &op, 1);
                 cnt++;
+                std::cout << "Received op='" << op << "' from socket=" << clientSocket << std::endl;
                 // recieving data
                 std::cout << op << std::endl;
                 if (op == 'G') {
                     //get
-                    operationCounter++; //this is another operation but doesn't affect sole locking, gonna need to 
+                    
                     //figure out how to allow for simultaneous reads tho
                     int net_key;
                     recv_all(clientSocket, &net_key, 4);
                     int key = ntohl(net_key);
                     // std::cout << key << std::endl;
-                    int currentOperation = operationCounter + (myIndex+1)*operations; //uniqueID
-                    map.getLock(key, currentOperation); 
-                    auto res = map.get(key);
-                    map.unLock(key, currentOperation); 
+                    std::thread([clientSocket, key, &map, &operationCounter, myIndex, operations]() {
+                        // operationCounter++; //this is another operation but doesn't affect sole locking, gonna need to 
+                        int currentOperation = operationCounter.fetch_add(1) + (myIndex+1)*operations;
+                        map.getLock(key, currentOperation); 
+                        auto res = map.get(key);
+                        map.unLock(key, currentOperation); 
 
-                    if (res.size() == 0) {
-                        char zero = '0';
-                        send(clientSocket, &zero, 1, 0);
-                    } else {
-                        std::vector<uint8_t> msg;
-                        int len = htonl(res.size());
-                        msg.reserve(1 + sizeof(len) + res.size());
-                        msg.push_back('1');
-                        uint8_t* p = reinterpret_cast<uint8_t*>(&len);
-                        msg.insert(msg.end(), p, p + sizeof(len));
-                        msg.insert(msg.end(), res.begin(), res.end());
-                        send(clientSocket, msg.data(), msg.size(), 0);
-                    }
+                        if (res.size() == 0) {
+                            char zero = '0';
+                            send(clientSocket, &zero, 1, 0);
+                        } else {
+                            std::vector<uint8_t> msg;
+                            int len = htonl(res.size());
+                            msg.reserve(1 + sizeof(len) + res.size());
+                            msg.push_back('1');
+                            uint8_t* p = reinterpret_cast<uint8_t*>(&len);
+                            msg.insert(msg.end(), p, p + sizeof(len));
+                            msg.insert(msg.end(), res.begin(), res.end());
+                            send(clientSocket, msg.data(), msg.size(), 0);
+                        }
+                    }).detach();
                 }
                 else if (op == 'P') {
                     //put
-                    operationCounter++; //gonna have to send this with teh first digit identifying the nodeh
+                    
                     int net_key;
                     recv_all(clientSocket, &net_key, 4);
                     int key = ntohl(net_key);
@@ -280,27 +287,43 @@ for (size_t i = 0; i < processIPS.size(); i++) {
 
                     std::vector<uint8_t> value(len);
                     recv_all(clientSocket, value.data(), len);
-                    std::vector<int> replications = getReplicationMapping(key, myIndex, replication, processIPS.size());
                     
-                    int currentOperation = operationCounter + (myIndex+1)*operations; //uniqueID
-                    map.getLock(key, currentOperation); 
-                    bool ok = map.put(key, value);
-                    for(auto nodeID : replications){
-                        std::cout << nodeID << std::endl;
-                        while(!sendLock(outgoingServerSockets[nodeID], key, currentOperation)){
-                            //just need to keep trying atm, we assume no failures
+                    std::thread([clientSocket, key, value, &map, &operationCounter, myIndex, 
+                                operations, replication, &processIPS, &socketMutexes, port]() {
+                        // operationCounter++; //gonna have to send this with teh first digit identifying the nodeh
+                        std::vector<int> replications = getReplicationMapping(key, myIndex, replication, processIPS.size());
+                        
+                        int currentOperation = operationCounter.fetch_add(1) + (myIndex+1)*operations;
+                        
+                        for(auto nodeID : replications){
+                            if(nodeID == myIndex){
+                                while(!map.getLock(key, currentOperation)){}
+                                continue;
+                            }
+                            std::lock_guard<std::mutex> lock(socketMutexes[nodeID]);
+                            int temp_sock = connect_to_server(processIPS[nodeID], port);
+                            while(!sendLock(temp_sock, key, currentOperation)){
+                            }
+                            close(temp_sock);
+                            
                         }
-                    }
-                    // for(auto nodeID : replications){
-                    //     sendAdd(processIPS[nodeID]);
-                    // }
-                    for(auto nodeID : replications){
-                        while(!sendUnlock(outgoingServerSockets[nodeID], key, currentOperation)){
-                            //just need to keep trying atm, we assume no failures
+                        
+                        bool ok = map.put(key, value);
+                        
+                        for(auto nodeID : replications){
+                            if(nodeID == myIndex){
+                                while(!map.unLock(key, currentOperation)){}
+                                continue;
+                            }
+                            std::lock_guard<std::mutex> lock(socketMutexes[nodeID]);
+                            int temp_sock = connect_to_server(processIPS[nodeID], port);
+                            while(!sendUnlock(temp_sock, key, currentOperation)){
+                            }
+                            close(temp_sock);
                         }
-                    }
 
-                    send(clientSocket, &ok, 1, 0);
+                        send(clientSocket, &ok, 1, 0);
+                    }).detach();
                 }
                 else if (op == 'C'){
                     close(clientSocket);
@@ -314,10 +337,11 @@ for (size_t i = 0; i < processIPS.size(); i++) {
                     int netoperation;
                     recv_all(clientSocket, &netoperation, 4);
                     int operation = ntohl(netoperation);
-                    bool ok = map.getLock(key, operation);
-                    //send back ack
 
-                    send(clientSocket, &ok, 1, 0);
+                    // std::thread([clientSocket, key, operation, &map]() {
+                        bool ok = map.getLock(key, operation);
+                        send(clientSocket, &ok, 1, 0);
+                    // }).detach();
                 }
                 else if (op == 'U'){
                     int net_key;
@@ -326,9 +350,10 @@ for (size_t i = 0; i < processIPS.size(); i++) {
                     int netoperation;
                     recv_all(clientSocket, &netoperation, 4);
                     int operation = ntohl(netoperation);
-                    bool ok = map.unLock(key, operation);
-                    //send back ack
-                    send(clientSocket, &ok, 1, 0);
+                    // std::thread([clientSocket, key, operation, &map]() {
+                        bool ok = map.unLock(key, operation);
+                        send(clientSocket, &ok, 1, 0);
+                    // }).detach();
                 }
             }
         }

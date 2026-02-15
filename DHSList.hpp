@@ -14,9 +14,9 @@ class DHSList {
     private:
         std::vector<std::vector<uint8_t>> m;
         std::vector<bool> puts;
-        std::vector<std::unique_ptr<std::shared_mutex>> readMutex;
+        std::vector<std::unique_ptr<std::mutex>> readMutex;
         std::vector<int> serverLockings; //if something is locked, hold what is lockign it
-        std::vector<std::unique_ptr<std::shared_mutex>> serverLockingsLocks;
+        std::vector<std::unique_ptr<std::mutex>> serverLockingsLocks;
         int size;
 
 };
@@ -27,20 +27,20 @@ DHSList::DHSList(int _size){
     puts.resize(size, false);
     serverLockings.resize(size, NULL);
     for (int i = 0; i < size; i++){
-        readMutex.emplace_back(std::make_unique<std::shared_mutex>());
-        serverLockingsLocks.emplace_back(std::make_unique<std::shared_mutex>());
+        readMutex.emplace_back(std::make_unique<std::mutex>());
+        serverLockingsLocks.emplace_back(std::make_unique<std::mutex>());
     }
 }
 
 std::vector<uint8_t> DHSList::get(int key){
-    int index = key / size;
-    readMutex[index]->lock_shared();
+    int index = key % size;
+    // readMutex[index]->lock_shared();
     if (puts[index]){
         auto res = m[index];
-        readMutex[index]->unlock_shared();
+        // readMutex[index]->unlock_shared();
         return res;
     }
-    readMutex[index]->unlock_shared();
+    // readMutex[index]->unlock_shared();
     return std::vector<uint8_t>();
 }
 
@@ -62,14 +62,14 @@ bool DHSList::getLock(int key, int operation){ //, std::string serverIP
     //since the same server will be telling everyone to lock it we can skip it if it is already locked by that ip
     //actaully jk, make it on the server to only lock things once
     int index = key % size;
-    serverLockingsLocks[index]->lock_shared();
+    serverLockingsLocks[index]->lock(); //should be shared but just trying to undeadlock rn
     if(serverLockings[index] == operation){
-        serverLockingsLocks[index]->unlock();
+        serverLockingsLocks[index]->unlock(); //s
         return true;
     }
+    // serverLockingsLocks[index]->unlock_shared(); //cant upgrade apparently
+    // serverLockingsLocks[index]->lock();
     readMutex[index]->lock();
-    serverLockingsLocks[index]->unlock(); //cant upgrade apparently
-    serverLockingsLocks[index]->lock();
     serverLockings[index] = operation;
     serverLockingsLocks[index]->unlock();
     return true;
