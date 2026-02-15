@@ -9,6 +9,7 @@
 #include <cstring>
 #include "serialization.cpp"
 #include "DHSList.hpp"
+#include <atomic>
 
 
 std::vector<std::string> getProcesses(std::string filename, int* operations, int* keys){
@@ -45,6 +46,7 @@ int main() {
     char type = '1';
     int operations = 1000;
     int keys = 10;
+    std::atomic<int> operationCounter(0);
     std::vector<std::string> processIPS = getProcesses("config.txt", &operations, &keys);
     std::vector<bool> locksHeld; //which locks we currently have
     std::vector<std::unique_ptr<std::shared_mutex>> lockLocks; //lock the thing to say if we have a lock
@@ -112,6 +114,8 @@ int main() {
                 // recieving data
                 if (op == 'G') {
                     //get
+                    operationCounter++; //this is another operation but doesn't affect sole locking, gonna need to 
+                    //figure out how to allow for simultaneous reads tho
                     int net_key;
                     recv_all(clientSocket, &net_key, 4);
                     int key = ntohl(net_key);
@@ -135,6 +139,7 @@ int main() {
                 }
                 else if (op == 'P') {
                     //put
+                    operationCounter++;
                     int net_key;
                     recv_all(clientSocket, &net_key, 4);
                     int key = ntohl(net_key);
