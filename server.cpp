@@ -68,6 +68,48 @@ int connect_to_server(const std::string& ip, int port) {
     std::cout << "Connected to server: " << ip << std::endl;
     return sock;
 }
+std::vector<int> getReplicationMapping(int key, int myIndex, int replicationIndex, int processQuantity){
+    std::vector<int> res;
+    if (replicationIndex == 1){
+        return res;
+    }
+    for(int i = 0; i < replicationIndex-1; i++){
+        myIndex++;
+        if (myIndex >= processQuantity){
+            myIndex = 0;
+        }
+        res.push_back(myIndex);
+    }
+    return res;
+}
+bool sendLock(int sock, int key, int operation) {
+    char op_code = 'L';
+    if (send(sock, &op_code, 1, 0) != 1) {
+        std::cerr << "Failed to send operation code\n";
+        return false;
+    }
+
+    uint32_t net_key = htonl(key);
+    uint32_t net_operation = htonl(operation);
+
+    if (send(sock, &net_key, sizeof(net_key), 0) != sizeof(net_key)) {
+        std::cerr << "Failed to send key\n";
+        return false;
+    }
+
+    if (send(sock, &net_operation, sizeof(net_operation), 0) != sizeof(net_operation)) {
+        std::cerr << "Failed to send operation\n";
+        return false;
+    }
+
+    uint8_t ack;
+    if (!recv_all(sock, &ack, 1)) {
+        std::cerr << "Failed to receive lock ack\n";
+        return false;
+    }
+
+    return ack != 0;
+}
 
 
 int main(int argc, char* argv[]) {
@@ -114,17 +156,26 @@ int main(int argc, char* argv[]) {
     //need to connect to all other servers too
     std::string myIP = processIPS[myIndex];
 
-    for (const auto& ip : processIPS) {
-        while (true) {
-            int sock = connect_to_server(ip, port);
-            if (sock >= 0) {
-                FD_SET(sock, &master);
-                maxfd = std::max(maxfd, sock);
-                break;
-            }
-            sleep(1);
+    std::vector<int> outgoingServerSockets; // index matches processIPS
+
+for (size_t i = 0; i < processIPS.size(); i++) {
+    const auto& ip = processIPS[i];
+    if (ip == myIP){
+        outgoingServerSockets.push_back(0); //placeholder to keep ids matching
+    } 
+    continue; // skip self
+
+    while (true) {
+        int sock = connect_to_server(ip, port);
+        if (sock >= 0) {
+            FD_SET(sock, &master);
+            maxfd = std::max(maxfd, sock);
+            outgoingServerSockets.push_back(sock);
+            break;
         }
+        sleep(1);
     }
+}
 
     // accepting connection request
     while (true){
@@ -198,8 +249,22 @@ int main(int argc, char* argv[]) {
 
                     std::vector<uint8_t> value(len);
                     recv_all(clientSocket, value.data(), len);
-
+                    std::vector<int> replications = getReplicationMapping(key, myIndex, replication, processIPS.size());
+                    
+                    int currentOperation = operationCounter + (myIndex+1)*operations; //uniqueID
+                    map.getLock(key, currentOperation); 
                     bool ok = map.put(key, value);
+                    for(auto nodeID : replications){
+                        while(sendLock(outgoingServerSockets[nodeID], key, currentOperation)){
+                            //just need to keep trying atm, we assume no failures
+                        }
+                    }
+                    // for(auto nodeID : replications){
+                    //     sendAdd(processIPS[nodeID]);
+                    // }
+                    // for(auto nodeID : replications){
+                    //     sendUnlock(processIPS[nodeID]);
+                    // }
 
                     send(clientSocket, &ok, 1, 0);
                 }
