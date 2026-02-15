@@ -56,7 +56,7 @@ bool DHSList::put(int key, std::vector<uint8_t> val){
     }
     m[index] = val;
     // readMutex[index]->unlock();
-    return false;
+    return true;
 }
 bool DHSList::getLock(int key, int operation){ //, std::string serverIP
     //since the same server will be telling everyone to lock it we can skip it if it is already locked by that ip
