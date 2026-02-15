@@ -416,9 +416,21 @@ int main(int argc, char* argv[]) {
                             }
                         }
                         
-                        
-                        bool ok = map.put(keys[0], vals[0]);
-                        //gotta put on all 3
+                        bool ok;
+                        for(int j = 0; j < 3; j++){
+                            for (auto nodeID : allReplications[j]){
+                            if(nodeID == myIndex){
+                                ok = map.put(keys[j], vals[j]);
+                                continue;
+                            }
+                            std::lock_guard<std::mutex> lock(socketMutexes[nodeID]);
+                            int temp_sock = connect_to_server(processIPS[nodeID], port);
+                            while(!sendAdjust(temp_sock, keys[j], vals[j], currentOperation)){
+                            }
+                            close(temp_sock);
+                        }
+                        }
+
                         for(int j = 0; j < 3; j++){
                             for(auto nodeID : allReplications[j]){
                             if(nodeID == myIndex){

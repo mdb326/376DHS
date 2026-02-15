@@ -103,6 +103,37 @@ int put_val(int key, std::string val, std::string serverIP, int serverPort, int 
     // closing socket
     return buffer[0];
 }
+int three_put(const std::vector<int>& keys, const std::vector<std::string>& vals, std::string serverIP, int serverPort, int clientSocket){
+    std::vector<uint8_t> message;
+    size_t totalSize = 1;
+    for (int i = 0; i < 3; i++) {
+        totalSize += 4 + 4 + vals[i].length();
+    }
+
+    message.reserve(totalSize);
+
+    message.push_back('3');
+    uint8_t buf[4];
+
+    for (int i = 0; i < 3; i++) {
+        int net_key = htonl(keys[i]);
+        std::memcpy(buf, &net_key, 4);
+        message.insert(message.end(), buf, buf + 4);
+
+        int net_len = htonl(vals[i].length());
+        std::memcpy(buf, &net_len, 4);
+        message.insert(message.end(), buf, buf + 4);
+        
+        message.insert(message.end(), vals[i].begin(), vals[i].end());
+    }
+
+    send(clientSocket, message.data(), message.size(), 0);
+
+    char buffer[1] = {0};
+    recv(clientSocket, buffer, sizeof(buffer), 0);
+
+    return buffer[0];
+}
 int generateRandomInteger(int min, int max) {
     thread_local static std::random_device rd; // creates random device (unique to each thread to prevent race cons) (static to avoid reinitialization)
     thread_local static std::mt19937 gen(rd());  // Seeding the RNG (unique to each thread to prevent race cons) (static to avoid reinitialization)
