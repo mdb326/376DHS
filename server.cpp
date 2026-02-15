@@ -12,7 +12,7 @@
 #include <atomic>
 
 
-std::vector<std::string> getProcesses(std::string filename, int* operations, int* keys){
+std::vector<std::string> getProcesses(std::string filename, int* operations, int* keys, int* replication){
     std::ifstream config("config.txt");
     std::string line;
     std::vector<std::string> result;
@@ -20,6 +20,8 @@ std::vector<std::string> getProcesses(std::string filename, int* operations, int
     *operations = std::stoi(line);
     std::getline(config, line);
     *keys = std::stoi(line);
+    std::getline(config, line);
+    *replication = std::stoi(line);
 
     while (std::getline(config, line)) {
         if (line == "Servers:"){
@@ -73,8 +75,9 @@ int main(int argc, char* argv[]) {
     char type = '1';
     int operations = 1000;
     int keys = 10;
+    int replication = 1;
     std::atomic<int> operationCounter(0);
-    std::vector<std::string> processIPS = getProcesses("config.txt", &operations, &keys);
+    std::vector<std::string> processIPS = getProcesses("config.txt", &operations, &keys, &replication);
     std::vector<bool> locksHeld; //which locks we currently have
     std::vector<std::unique_ptr<std::shared_mutex>> lockLocks; //lock the thing to say if we have a lock
     for (int i = 0; i < processIPS.size(); i++){
@@ -161,8 +164,10 @@ int main(int argc, char* argv[]) {
                     recv_all(clientSocket, &net_key, 4);
                     int key = ntohl(net_key);
                     // std::cout << key << std::endl;
-
+                    int currentOperation = operationCounter + (myIndex+1)*operations; //uniqueID
+                    map.getLock(key, currentOperation); 
                     auto res = map.get(key);
+                    map.unLock(key, currentOperation); 
 
                     if (res.size() == 0) {
                         char zero = '0';

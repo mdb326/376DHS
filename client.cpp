@@ -29,7 +29,7 @@ bool recv_all(int sock, void* buf, size_t len) {
     }
     return true;
 }
-std::vector<std::string> getProcesses(std::string filename, int* operations, int* keys){
+std::vector<std::string> getProcesses(std::string filename, int* operations, int* keys, int* replication){
     std::ifstream config("config.txt");
     std::string line;
     std::vector<std::string> result;
@@ -37,6 +37,8 @@ std::vector<std::string> getProcesses(std::string filename, int* operations, int
     *operations = std::stoi(line);
     std::getline(config, line);
     *keys = std::stoi(line);
+    std::getline(config, line);
+    *replication = std::stoi(line);
 
     while (std::getline(config, line)) {
         if (line == "Servers:"){
@@ -137,7 +139,8 @@ int main(){
     signal(SIGPIPE, SIG_IGN); //stop killing server
     int operations = 1000;
     int keys = 10;
-    std::vector<std::string> processes = getProcesses("config.txt", &operations, &keys);
+    int replication = 1;
+    std::vector<std::string> processes = getProcesses("config.txt", &operations, &keys, &replication);
     int port = 1895;
     
     std::string SERVER_IP = processes[0];
@@ -146,17 +149,6 @@ int main(){
     int successful_gets = 0;
     int failed_gets = 0;
 
-    //start server here
-    // pid_t pid = fork();
-    // if (pid == 0){
-    //     //child
-    //     char* const args[] = {
-    //         (char*)"./server",
-    //         nullptr
-    //     };
-    //     execv("./server", args);
-    //     _exit(0);
-    // }
     
     // barrier
     std::vector<int> sockets;

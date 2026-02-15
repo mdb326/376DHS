@@ -1,27 +1,26 @@
 #!/bin/bash
 
-USER="mdb326"
-HOSTS=("mars.cse.lehigh.edu" "io.cse.lehigh.edu")
+SESSION="distributed"
+PROGRAM="/home/mdb326/cse376/376DHS/server"
 
-SESSION="mysession"
-DIR="/home/mdb326/cse376/376DHS"
-PROG1="./client"
-PROG2="./server"
-
-for HOST in "${HOSTS[@]}"; do
-  echo "Starting programs on $HOST..."
-
-  ssh -t "$USER@$HOST" bash <<EOF &
-screen -S $SESSION -X quit 2>/dev/null
+HOSTS=(
+    "mdb326@io.cse.lehigh.edu"
+    "mdb326@mars.cse.lehigh.edu"
+)
 
 screen -dmS $SESSION
 
-screen -S $SESSION -X screen bash -c "cd $DIR && $PROG1; exec bash"
-screen -S $SESSION -X screen bash -c "cd $DIR && $PROG2; exec bash"
+INDEX=0
+for HOST in "${HOSTS[@]}"; do
+    WIN="server_$INDEX"
 
-screen -r $SESSION
-EOF
+    echo "Starting $PROGRAM on $HOST in screen window $WIN"
 
+    # Add a new window to the screen session and run ssh
+    screen -S "$SESSION" -X screen -t "$WIN_NAME" bash -c "ssh $HOST; exec bash"
+
+    INDEX=$((INDEX + 1))
 done
 
-wait
+# Attach to session
+screen -r $SESSION
