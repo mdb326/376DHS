@@ -377,7 +377,7 @@ int main(int argc, char* argv[]) {
                         int net_key;
                         recv_all(clientSocket, &net_key, 4);
                         int key = ntohl(net_key);
-                        keys[i] = key;
+                        keys[j] = key;
                         // std::cout << "put" << std::endl;
                         // std::cout << key << std::endl;
 
@@ -387,11 +387,11 @@ int main(int argc, char* argv[]) {
 
                         std::vector<uint8_t> value(len);
                         recv_all(clientSocket, value.data(), len);
-                        vals[i] = value;
+                        vals[j] = value;
                     }
                     
                     
-                    std::thread([clientSocket, &keys, &vals, &map, &operationCounter, myIndex, 
+                    std::thread([clientSocket, keys, vals, &map, &operationCounter, myIndex, 
                                 operations, replication, &processIPS, &socketMutexes, port]() {
                         // operationCounter++; //gonna have to send this with teh first digit identifying the nodeh
                         std::vector<std::vector<int>> allReplications(3);

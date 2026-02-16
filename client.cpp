@@ -215,9 +215,27 @@ int main(){
         int index = key % processes.size();
         SERVER_IP = processes[index];
         int socket = sockets[index];
-        if (generateRandomInteger(1,5) == 1){
-            std::string val = generateRandomString(200);
+        int num = generateRandomInteger(1,5);
+        if (num == 1){
+            std::string val = generateRandomString(5);
             int res = put_val(key, val, SERVER_IP, port, socket);
+            if(res){
+                successful_puts++;
+            }
+            else{
+                failed_puts++;
+            }
+        }
+        else if (num == 2){
+            std::vector<int> three_keys(3);
+            std::vector<std::string> vals(3);
+            three_keys[0] = key;
+            vals[0] = generateRandomString(5);
+            for(int i = 1; i < 3; i++){
+                three_keys[i] =  generateRandomInteger(1, keys);
+                vals[i] = generateRandomString(5);
+            }
+            int res = three_put(three_keys, vals, SERVER_IP, port, socket);
             if(res){
                 successful_puts++;
             }
