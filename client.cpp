@@ -163,6 +163,26 @@ std::string generateRandomString(int length){
     }
     return res;
 }
+int getSocket(std::string process, int port){
+    while(true){
+        int clientSocket = socket(AF_INET, SOCK_STREAM, 0);
+
+        sockaddr_in serverAddress{};
+        serverAddress.sin_family = AF_INET;
+        serverAddress.sin_port = htons(port);
+
+        if (inet_pton(AF_INET, process.c_str(), &serverAddress.sin_addr) <= 0) {
+            std::cerr << "Invalid IP address" << std::endl;
+            return NULL;
+        }
+
+        if (connect(clientSocket, (struct sockaddr*)&serverAddress, sizeof(serverAddress)) == 0) {
+            return(clientSocket);
+            break;
+        }
+        close(clientSocket);
+    }
+}
 
 
 int main(){
@@ -209,7 +229,7 @@ int main(){
     
     std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
     for(int i = 0; i < operations; i++){
-        // std::cout << i << std::endl;
+        std::cout << "Completed " << i << " operations" << std::endl;
         int key = generateRandomInteger(1, keys);
         // std::cout << key << std::endl;
         int index = key % processes.size();
@@ -226,23 +246,23 @@ int main(){
                 failed_puts++;
             }
         }
-        else if (num == 2){
-            std::vector<int> three_keys(3);
-            std::vector<std::string> vals(3);
-            three_keys[0] = key;
-            vals[0] = generateRandomString(5);
-            for(int i = 1; i < 3; i++){
-                three_keys[i] =  generateRandomInteger(1, keys);
-                vals[i] = generateRandomString(5);
-            }
-            int res = three_put(three_keys, vals, SERVER_IP, port, socket);
-            if(res){
-                successful_puts++;
-            }
-            else{
-                failed_puts++;
-            }
-        }
+        // else if (num == 2){
+        //     std::vector<int> three_keys(3);
+        //     std::vector<std::string> vals(3);
+        //     three_keys[0] = key;
+        //     vals[0] = generateRandomString(5);
+        //     for(int i = 1; i < 3; i++){
+        //         three_keys[i] =  generateRandomInteger(1, keys);
+        //         vals[i] = generateRandomString(5);
+        //     }
+        //     int res = three_put(three_keys, vals, SERVER_IP, port, socket);
+        //     if(res){
+        //         successful_puts++;
+        //     }
+        //     else{
+        //         failed_puts++;
+        //     }
+        // }
         else{
             if (get_val(key, SERVER_IP, port, socket) == NULL){
                 failed_gets++;
