@@ -7,3 +7,20 @@ make hw
 #     ./test 65536
 # done
 # ./test
+
+
+ssh mdb326@nereid.cse.lehigh.edu
+
+cd cse376/376DHS
+ssh mdb326@io.cse.lehigh.edu
+
+cd cse376/376DHS
+ssh mdb326@mars.cse.lehigh.edu
+
+cd cse376/376DHS
+ssh mdb326@saturn.cse.lehigh.edu
+
+cd cse376/376DHS
+ssh mdb326@triton.cse.lehigh.edu
+
+cd cse376/376DHS

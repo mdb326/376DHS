@@ -191,7 +191,7 @@ int main(){
     int keys = 10;
     int replication = 1;
     std::vector<std::string> processes = getProcesses("config.txt", &operations, &keys, &replication);
-    int port = 1895;
+    int port = 4040;
     
     std::string SERVER_IP = processes[0];
     int successful_puts = 0;
