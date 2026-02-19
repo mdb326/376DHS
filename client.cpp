@@ -246,23 +246,29 @@ int main(){
                 failed_puts++;
             }
         }
-        // else if (num == 2){
-        //     std::vector<int> three_keys(3);
-        //     std::vector<std::string> vals(3);
-        //     three_keys[0] = key;
-        //     vals[0] = generateRandomString(5);
-        //     for(int i = 1; i < 3; i++){
-        //         three_keys[i] =  generateRandomInteger(1, keys);
-        //         vals[i] = generateRandomString(5);
-        //     }
-        //     int res = three_put(three_keys, vals, SERVER_IP, port, socket);
-        //     if(res){
-        //         successful_puts++;
-        //     }
-        //     else{
-        //         failed_puts++;
-        //     }
-        // }
+        else if (num == 2){
+            std::vector<int> three_keys(3);
+            std::vector<std::string> vals(3);
+            three_keys[0] = key;
+            vals[0] = generateRandomString(5);
+            for(int i = 1; i < 3; i++){
+                three_keys[i] =  generateRandomInteger(1, keys);
+                for(int j = 0; j < i; j++){
+                    if (three_keys[j] == three_keys[i]){//keep going until it is distinct
+                        three_keys[i] =  generateRandomInteger(1, keys);
+                        j = -1;
+                    }
+                }
+                vals[i] = generateRandomString(5);
+            }
+            int res = three_put(three_keys, vals, SERVER_IP, port, socket);
+            if(res){
+                successful_puts++;
+            }
+            else{
+                failed_puts++;
+            }
+        }
         else{
             if (get_val(key, SERVER_IP, port, socket) == NULL){
                 failed_gets++;
