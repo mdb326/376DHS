@@ -308,89 +308,130 @@ void dealWithSocket(int clientSocket, DHSList& map, std::atomic<int>& operationC
             return;
         }
         else if (op == '3') {
-            //3put
-            std::vector<int> keys(3);
-            std::vector<std::vector<uint8_t>> vals(3);
-            for(int j = 0; j < 3; j++){
-                int net_key, net_len;
-                
-                if (!recv_all(clientSocket, &net_key, 4)) {
-                    close(clientSocket);
-                    return;
-                }
-                keys[j] = ntohl(net_key);
-    
-                if (!recv_all(clientSocket, &net_len, 4)) {
-                    close(clientSocket);
-                    return;
-                }
-                int len = ntohl(net_len);
+    // 3put
+    std::vector<int> keys(3);
+    std::vector<std::vector<uint8_t>> vals(3);
 
-                std::vector<uint8_t> value(len);
-                if (!recv_all(clientSocket, value.data(), len)) {
-                    close(clientSocket);
-                    return;
-                }
-                vals[j] = value;
-            }
+    // Receive keys and values
+    for(int j = 0; j < 3; j++){
+        int net_key, net_len;
 
-            //gotta order keys too
-            std::vector<int> lockOrder = {0, 1, 2};
-            std::sort(lockOrder.begin(), lockOrder.end(), [&keys](int a, int b) {
-                return keys[a] < keys[b];
-            });
-            
-            std::vector<std::vector<int>> allReplications(3);
-            for (int j = 0; j < 3; j++){
-                allReplications[j] = getReplicationMapping(keys[j], myIndex, replication, processIPS.size());
-            }
-            
-            int currentOperation = operationCounter.fetch_add(1) + (myIndex+1)*operations;
-            for(int j : lockOrder){
-                for(auto nodeID : allReplications[j]){
-                    if(nodeID == myIndex){
-                        while(!map.getLock(keys[j], currentOperation)){}
-                        continue;
-                    }
-                    int temp_sock = connect_to_server(processIPS[nodeID], port);
-                    if (temp_sock >= 0) {
-                        sendLock(temp_sock, keys[j], currentOperation);
-                        close(temp_sock);
-                    }
-                }
-            }
-            
-            bool ok = false;
-            for(int j : lockOrder){
-                for (auto nodeID : allReplications[j]){
-                    if(nodeID == myIndex){
-                        ok = map.put(keys[j], vals[j]);
-                        continue;
-                    }
-                    int temp_sock = connect_to_server(processIPS[nodeID], port);
-                    if (temp_sock >= 0) {
-                        sendAdjust(temp_sock, keys[j], vals[j], currentOperation);
-                        close(temp_sock);
-                    }
-                }
-            }
-
-            for(int j : lockOrder){
-                for(auto nodeID : allReplications[j]){
-                    if(nodeID == myIndex){
-                        while(!map.unLock(keys[j], currentOperation)){}
-                        continue;
-                    }
-                    int temp_sock = connect_to_server(processIPS[nodeID], port);
-                    if (temp_sock >= 0) {
-                        sendUnlock(temp_sock, keys[j], currentOperation);
-                        close(temp_sock);
-                    }
-                }
-            }
-
-            send(clientSocket, &ok, 1, 0);
+        if (!recv_all(clientSocket, &net_key, 4) ||
+            !recv_all(clientSocket, &net_len, 4)) {
+            close(clientSocket);
+            return;
         }
+        keys[j] = ntohl(net_key);
+        int len = ntohl(net_len);
+
+        vals[j].resize(len);
+        if (!recv_all(clientSocket, vals[j].data(), len)) {
+            close(clientSocket);
+            return;
+        }
+    }
+
+    // Order keys
+    std::vector<int> lockOrder = {0, 1, 2};
+    std::sort(lockOrder.begin(), lockOrder.end(), [&keys](int a, int b){
+        return keys[a] < keys[b];
+    });
+
+    // Compute replicas
+    std::vector<std::vector<int>> allReplications(3);
+    for (int j = 0; j < 3; j++){
+        allReplications[j] = getReplicationMapping(keys[j], myIndex, replication, processIPS.size());
+    }
+
+    int currentOperation = operationCounter.fetch_add(1) + (myIndex+1)*operations;
+    bool allAcquired = false;
+    const int maxRetries = 10;
+
+    for(int attempt = 0; attempt < maxRetries && !allAcquired; attempt++){
+        std::cerr << "[3put][op=" << currentOperation << "] Attempt " << attempt+1 << " to acquire locks" << std::endl;
+        allAcquired = true;
+        std::vector<std::pair<int,int>> acquiredLocks; // key,nodeID pairs
+
+        for(int j : lockOrder){
+            for(auto nodeID : allReplications[j]){
+                bool gotLock = false;
+                if(nodeID == myIndex){
+                    gotLock = map.getLock(keys[j], currentOperation); // implement non-blocking tryLock
+                    if(gotLock) acquiredLocks.emplace_back(keys[j], nodeID);
+                } else {
+                    int temp_sock = connect_to_server(processIPS[nodeID], port);
+                    if(temp_sock >= 0){
+                        gotLock = sendLock(temp_sock, keys[j], currentOperation); // returns true if lock granted
+                        close(temp_sock);
+                        if(gotLock) acquiredLocks.emplace_back(keys[j], nodeID);
+                    }
+                }
+
+                if(!gotLock){
+                    std::cerr << "[3put][op=" << currentOperation << "] Failed to acquire lock for key "
+                              << keys[j] << " on node " << nodeID << ", releasing acquired locks" << std::endl;
+
+                    // Release everything we have acquired so far
+                    for(auto it = acquiredLocks.rbegin(); it != acquiredLocks.rend(); ++it){
+                        int k = it->first, n = it->second;
+                        if(n == myIndex) map.unLock(k, currentOperation);
+                        else {
+                            int temp_sock = connect_to_server(processIPS[n], port);
+                            if(temp_sock >= 0){
+                                sendUnlock(temp_sock, k, currentOperation);
+                                close(temp_sock);
+                            }
+                        }
+                    }
+                    allAcquired = false;
+                    std::this_thread::sleep_for(std::chrono::milliseconds(10 + rand()%10));
+                    break; // break inner loop to retry all locks
+                }
+            }
+            if(!allAcquired) break; // break outer loop if any lock failed
+        }
+    }
+
+    if(!allAcquired){
+        std::cerr << "[3put][op=" << currentOperation << "] Failed to acquire all locks after retries" << std::endl;
+        send(clientSocket, "\0", 1, 0);
+        return;
+    }
+
+    // Perform puts
+    bool ok = false;
+    for(int j : lockOrder){
+        for(auto nodeID : allReplications[j]){
+            if(nodeID == myIndex){
+                ok = map.put(keys[j], vals[j]);
+                continue;
+            }
+            int temp_sock = connect_to_server(processIPS[nodeID], port);
+            if(temp_sock >= 0){
+                sendAdjust(temp_sock, keys[j], vals[j], currentOperation);
+                close(temp_sock);
+            }
+        }
+    }
+
+    // Release locks
+    for(int j : lockOrder){
+        for(auto nodeID : allReplications[j]){
+            if(nodeID == myIndex){
+                map.unLock(keys[j], currentOperation);
+                continue;
+            }
+            int temp_sock = connect_to_server(processIPS[nodeID], port);
+            if(temp_sock >= 0){
+                sendUnlock(temp_sock, keys[j], currentOperation);
+                close(temp_sock);
+            }
+        }
+    }
+
+    send(clientSocket, &ok, 1, 0);
+}
+
         else if (op == 'C'){
             close(clientSocket);
             return;
