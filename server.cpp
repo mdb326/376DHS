@@ -172,7 +172,7 @@ bool sendAdjust(int sock, int key, const std::vector<uint8_t>& value, int operat
     return ack != 0;
 }
 void dealWithSocket(int clientSocket, DHSList& map, std::atomic<int>& operationCounter, int myIndex, int operations, int replication, 
-                    const std::vector<std::string>& processIPS, std::vector<std::mutex>& socketMutexes, int port) {
+                    const std::vector<std::string>& processIPS, int port) {
     //keep open until we get a c
     while(true){
         char op;
@@ -242,7 +242,6 @@ void dealWithSocket(int clientSocket, DHSList& map, std::atomic<int>& operationC
                     while(!map.getLock(key, currentOperation)){}
                     continue;
                 }
-                // std::lock_guard<std::mutex> lock(socketMutexes[nodeID]);
                 int temp_sock = connect_to_server(processIPS[nodeID], port);
                 if (temp_sock >= 0) {
                     sendLock(temp_sock, key, currentOperation);
@@ -256,7 +255,6 @@ void dealWithSocket(int clientSocket, DHSList& map, std::atomic<int>& operationC
                     ok = map.put(key, value);
                     continue;
                 }
-                // std::lock_guard<std::mutex> lock(socketMutexes[nodeID]);
                 int temp_sock = connect_to_server(processIPS[nodeID], port);
                 if (temp_sock >= 0) {
                     sendAdjust(temp_sock, key, value, currentOperation);
@@ -269,7 +267,6 @@ void dealWithSocket(int clientSocket, DHSList& map, std::atomic<int>& operationC
                     while(!map.unLock(key, currentOperation)){}
                     continue;
                 }
-                // std::lock_guard<std::mutex> lock(socketMutexes[nodeID]);
                 int temp_sock = connect_to_server(processIPS[nodeID], port);
                 if (temp_sock >= 0) {
                     sendUnlock(temp_sock, key, currentOperation);
@@ -347,34 +344,19 @@ void dealWithSocket(int clientSocket, DHSList& map, std::atomic<int>& operationC
             for (int j = 0; j < 3; j++){
                 allReplications[j] = getReplicationMapping(keys[j], myIndex, replication, processIPS.size());
             }
-
-            //sort based on which node we are going to as well
-            std::vector<std::pair<int, int>> lockPairs;
-            for(int j : lockOrder){
-                for(auto nodeID : allReplications[j]){
-                    lockPairs.push_back({j, nodeID});
-                }
-            }
-            std::sort(lockPairs.begin(), lockPairs.end(), [&keys](auto& a, auto& b){
-                if(a.second != b.second) return a.second < b.second;
-                return keys[a.first] < keys[b.first];
-            });
-
-            //remove ones replicating ot same server
-            lockPairs.erase(std::unique(lockPairs.begin(), lockPairs.end()), lockPairs.end());
-
             
             int currentOperation = operationCounter.fetch_add(1) + (myIndex+1)*operations;
-            for(auto [keyIdx, nodeID] : lockPairs){
-                if(nodeID == myIndex){
-                    while(!map.getLock(keys[keyIdx], currentOperation)){}
-                    continue;
-                }
-                // std::lock_guard<std::mutex> lock(socketMutexes[nodeID]);
-                int temp_sock = connect_to_server(processIPS[nodeID], port);
-                if (temp_sock >= 0) {
-                    sendLock(temp_sock, keys[keyIdx], currentOperation);
-                    close(temp_sock);
+            for(int j : lockOrder){
+                for(auto nodeID : allReplications[j]){
+                    if(nodeID == myIndex){
+                        while(!map.getLock(keys[j], currentOperation)){}
+                        continue;
+                    }
+                    int temp_sock = connect_to_server(processIPS[nodeID], port);
+                    if (temp_sock >= 0) {
+                        sendLock(temp_sock, keys[j], currentOperation);
+                        close(temp_sock);
+                    }
                 }
             }
             
@@ -385,7 +367,6 @@ void dealWithSocket(int clientSocket, DHSList& map, std::atomic<int>& operationC
                         ok = map.put(keys[j], vals[j]);
                         continue;
                     }
-                    // std::lock_guard<std::mutex> lock(socketMutexes[nodeID]);
                     int temp_sock = connect_to_server(processIPS[nodeID], port);
                     if (temp_sock >= 0) {
                         sendAdjust(temp_sock, keys[j], vals[j], currentOperation);
@@ -400,7 +381,6 @@ void dealWithSocket(int clientSocket, DHSList& map, std::atomic<int>& operationC
                         while(!map.unLock(keys[j], currentOperation)){}
                         continue;
                     }
-                    // std::lock_guard<std::mutex> lock(socketMutexes[nodeID]);
                     int temp_sock = connect_to_server(processIPS[nodeID], port);
                     if (temp_sock >= 0) {
                         sendUnlock(temp_sock, keys[j], currentOperation);
@@ -506,11 +486,8 @@ int main(int argc, char* argv[]) {
 
     // listening to the assigned socket
     listen(server_fd, 100);
-    //need to connect to all other servers too
-    std::string myIP = processIPS[myIndex];
 
-    // std::vector<int> outgoingServerSockets; // index matches processIPS
-    std::vector<std::mutex> socketMutexes(processIPS.size());
+    std::string myIP = processIPS[myIndex];
 
 
     // accepting connection request
@@ -524,8 +501,7 @@ int main(int argc, char* argv[]) {
         // std::cout << "Accepted connection, socket=" << clientSocket << std::endl;
         
         std::thread(dealWithSocket, clientSocket, std::ref(map), std::ref(operationCounter),
-                   myIndex, operations, replication, std::ref(processIPS), 
-                   std::ref(socketMutexes), port).detach();
+                   myIndex, operations, replication, std::ref(processIPS), port).detach();
     }
     
     close(server_fd);
