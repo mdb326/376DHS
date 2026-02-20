@@ -13,8 +13,16 @@
 #include <algorithm>
 #include <thread>
 #include <mutex>
+#include <map>
+#include <random>
 
+int generateRandomInteger(int min, int max) {
+    thread_local static std::random_device rd; // creates random device (unique to each thread to prevent race cons) (static to avoid reinitialization)
+    thread_local static std::mt19937 gen(rd());  // Seeding the RNG (unique to each thread to prevent race cons) (static to avoid reinitialization)
+    std::uniform_int_distribution<> distrib(min, max); // Create uniform int dist between min and max (inclusive)
 
+    return distrib(gen); // Generate random number from the uniform int dist (inclusive)
+}
 std::vector<std::string> getProcesses(std::string filename, int* operations, int* keys, int* replication){
     std::ifstream config("config.txt");
     std::string line;
@@ -42,6 +50,15 @@ bool recv_all(int sock, void* buf, size_t len) {
         ssize_t r = recv(sock, (char*)buf + received, len - received, 0);
         if (r <= 0) return false;
         received += r;
+    }
+    return true;
+}
+bool send_all(int sock, const void* buf, size_t len) {
+    size_t sent = 0;
+    while (sent < len) {
+        ssize_t s = send(sock, (const char*)buf + sent, len - sent, 0);
+        if (s <= 0) return false;
+        sent += s;
     }
     return true;
 }
@@ -87,22 +104,22 @@ std::vector<int> getReplicationMapping(int key, int myIndex, int replicationInde
     return res;
 }
 bool sendLock(int sock, int key, int operation) {
-    char op_code = 'L';
-    if (send(sock, &op_code, 1, 0) != 1) {
-        std::cerr << "Failed to send operation code\n";
-        return false;
-    }
-
     uint32_t net_key = htonl(key);
     uint32_t net_operation = htonl(operation);
+    std::vector<uint8_t> buffer;
+    buffer.reserve(1 + sizeof(net_key) + sizeof(net_operation));
 
-    if (send(sock, &net_key, sizeof(net_key), 0) != sizeof(net_key)) {
-        std::cerr << "Failed to send key\n";
-        return false;
-    }
+    char op_code = 'L';
+    buffer.push_back(op_code);
 
-    if (send(sock, &net_operation, sizeof(net_operation), 0) != sizeof(net_operation)) {
-        std::cerr << "Failed to send operation\n";
+    uint8_t* pKey = reinterpret_cast<uint8_t*>(&net_key);
+    buffer.insert(buffer.end(), pKey, pKey + sizeof(net_key));
+
+    uint8_t* pOp = reinterpret_cast<uint8_t*>(&net_operation);
+    buffer.insert(buffer.end(), pOp, pOp + sizeof(net_operation));
+
+    if (!send_all(sock, buffer.data(), buffer.size())) {
+        std::cerr << "Failed to send lock message\n";
         return false;
     }
 
@@ -115,22 +132,22 @@ bool sendLock(int sock, int key, int operation) {
     return ack != 0;
 }
 bool sendUnlock(int sock, int key, int operation) {
-    char op_code = 'U';
-    if (send(sock, &op_code, 1, 0) != 1) {
-        std::cerr << "Failed to send operation code\n";
-        return false;
-    }
-
     uint32_t net_key = htonl(key);
     uint32_t net_operation = htonl(operation);
+    std::vector<uint8_t> buffer;
+    buffer.reserve(1 + sizeof(net_key) + sizeof(net_operation));
 
-    if (send(sock, &net_key, sizeof(net_key), 0) != sizeof(net_key)) {
-        std::cerr << "Failed to send key\n";
-        return false;
-    }
+    char op_code = 'U';
+    buffer.push_back(op_code);
 
-    if (send(sock, &net_operation, sizeof(net_operation), 0) != sizeof(net_operation)) {
-        std::cerr << "Failed to send operation\n";
+    uint8_t* pKey = reinterpret_cast<uint8_t*>(&net_key);
+    buffer.insert(buffer.end(), pKey, pKey + sizeof(net_key));
+
+    uint8_t* pOp = reinterpret_cast<uint8_t*>(&net_operation);
+    buffer.insert(buffer.end(), pOp, pOp + sizeof(net_operation));
+
+    if (!send_all(sock, buffer.data(), buffer.size())) {
+        std::cerr << "Failed to send lock message\n";
         return false;
     }
 
@@ -158,7 +175,7 @@ bool sendAdjust(int sock, int key, const std::vector<uint8_t>& value, int operat
     message.insert(message.end(), reinterpret_cast<uint8_t*>(&net_len), reinterpret_cast<uint8_t*>(&net_len) + 4);
     message.insert(message.end(), value.begin(), value.end());
 
-    if (send(sock, message.data(), message.size(), 0) != (ssize_t)message.size()) {
+    if (!send_all(sock, message.data(), message.size())) {
         std::cerr << "Failed to send adjust message\n";
         return false;
     }
@@ -195,14 +212,17 @@ void dealWithSocket(int clientSocket, DHSList& map, std::atomic<int>& operationC
             }
             int key = ntohl(net_key);
             
-            int currentOperation = operationCounter.fetch_add(1) + (myIndex+1)*operations;
+            int currentOperation = ((myIndex + 1) << 28) | (operationCounter.fetch_add(1) & 0x0FFFFFFF);
             map.getLock(key, currentOperation); 
             auto res = map.get(key);
             map.unLock(key, currentOperation); 
 
             if (res.size() == 0) {
                 char zero = '0';
-                send(clientSocket, &zero, 1, 0);
+                if (!send_all(clientSocket, &zero, 1)) {
+                    std::cerr << "Failed to send '0' acknowledgment\n";
+                    return;
+                }
             } else {
                 std::vector<uint8_t> msg;
                 int len = htonl(res.size());
@@ -211,70 +231,73 @@ void dealWithSocket(int clientSocket, DHSList& map, std::atomic<int>& operationC
                 uint8_t* p = reinterpret_cast<uint8_t*>(&len);
                 msg.insert(msg.end(), p, p + sizeof(len));
                 msg.insert(msg.end(), res.begin(), res.end());
-                send(clientSocket, msg.data(), msg.size(), 0);
+                if (!send_all(clientSocket, msg.data(), msg.size())) {
+                    std::cerr << "Failed to send get message\n";
+                    return;
+                }
             }
         }
         else if (op == 'P') {
             //put
             int net_key;
-            if (!recv_all(clientSocket, &net_key, 4)) {
-                close(clientSocket);
-                return;
-            }
+            if (!recv_all(clientSocket, &net_key, 4)) { close(clientSocket); return; }
             int key = ntohl(net_key);
             int net_len;
-            if (!recv_all(clientSocket, &net_len, 4)) {
-                close(clientSocket);
-                return;
-            }
+            if (!recv_all(clientSocket, &net_len, 4)) { close(clientSocket); return; }
             int len = ntohl(net_len);
             std::vector<uint8_t> value(len);
-            if (!recv_all(clientSocket, value.data(), len)) {
-                close(clientSocket);
-                return;
-            }
-            
+            if (!recv_all(clientSocket, value.data(), len)) { close(clientSocket); return; }
+
             std::vector<int> replications = getReplicationMapping(key, myIndex, replication, processIPS.size());
-            int currentOperation = operationCounter.fetch_add(1) + (myIndex+1)*operations;
-            
-            for(auto nodeID : replications){
-                if(nodeID == myIndex){
-                    while(!map.getLock(key, currentOperation)){}
-                    continue;
-                }
-                int temp_sock = connect_to_server(processIPS[nodeID], port);
-                if (temp_sock >= 0) {
-                    sendLock(temp_sock, key, currentOperation);
-                    close(temp_sock);
-                }
+            int currentOperation = operationCounter.fetch_add(1) + ((myIndex + 1) << 28);
+
+            // Open one socket per replication node
+            std::map<int, int> repl_socks;
+            for (auto nodeID : replications) {
+                if (nodeID != myIndex)
+                    repl_socks[nodeID] = connect_to_server(processIPS[nodeID], port);
             }
-            
-            bool ok = false;
-            for (auto nodeID : replications){
-                if(nodeID == myIndex){
-                    ok = map.put(key, value);
-                    continue;
-                }
-                int temp_sock = connect_to_server(processIPS[nodeID], port);
-                if (temp_sock >= 0) {
-                    sendAdjust(temp_sock, key, value, currentOperation);
-                    close(temp_sock);
-                }
-            }
-            
-            for(auto nodeID : replications){
-                if(nodeID == myIndex){
-                    while(!map.unLock(key, currentOperation)){}
-                    continue;
-                }
-                int temp_sock = connect_to_server(processIPS[nodeID], port);
-                if (temp_sock >= 0) {
-                    sendUnlock(temp_sock, key, currentOperation);
-                    close(temp_sock);
+
+            // Lock phase
+            for (auto nodeID : replications) {
+                if (nodeID == myIndex) {
+                    while (!map.getLock(key, currentOperation)) {}
+                } else {
+                    sendLock(repl_socks[nodeID], key, currentOperation);
                 }
             }
 
-            send(clientSocket, &ok, 1, 0);
+            // Adjust phase
+            bool ok = false;
+            for (auto nodeID : replications) {
+                if (nodeID == myIndex) {
+                    ok = map.put(key, value);
+                } else {
+                    sendAdjust(repl_socks[nodeID], key, value, currentOperation);
+                }
+            }
+
+            // Unlock phase
+            for (auto nodeID : replications) {
+                if (nodeID == myIndex) {
+                    map.unLock(key, currentOperation);
+                } else {
+                    sendUnlock(repl_socks[nodeID], key, currentOperation);
+                }
+            }
+
+            // Close all replication sockets with a 'C' to cleanly end the connection
+            for (auto& [id, sock] : repl_socks) {
+                uint8_t close_msg = 'C';
+                send_all(sock, &close_msg, 1);
+                close(sock);
+            }
+
+            uint8_t ack = ok ? 1 : 0;
+            if (!send_all(clientSocket, &ack, 1)) {
+                std::cerr << "Failed to send acknowledgment\n";
+                return;
+            }
         }
         else if (op == 'A'){
             int net_operation, net_key, net_len;
@@ -303,134 +326,136 @@ void dealWithSocket(int clientSocket, DHSList& map, std::atomic<int>& operationC
             }
 
             bool ok = map.put(key, value);
-            send(clientSocket, &ok, 1, 0);
-            close(clientSocket);
-            return;
+            uint8_t ack = ok ? 1 : 0;
+            if (!send_all(clientSocket, &ack, 1)) {
+                std::cerr << "Failed to send acknowledgment\n";
+                return;
+            }
+            // close(clientSocket);
+            // return;
         }
         else if (op == '3') {
-    // 3put
-    std::vector<int> keys(3);
-    std::vector<std::vector<uint8_t>> vals(3);
+            std::vector<int> keys(3);
+            std::vector<std::vector<uint8_t>> vals(3);
 
-    // Receive keys and values
-    for(int j = 0; j < 3; j++){
-        int net_key, net_len;
+            for(int j = 0; j < 3; j++){
+                int net_key, net_len;
+                if (!recv_all(clientSocket, &net_key, 4) ||
+                    !recv_all(clientSocket, &net_len, 4)) {
+                    close(clientSocket);
+                    return;
+                }
+                keys[j] = ntohl(net_key);
+                int len = ntohl(net_len);
+                vals[j].resize(len);
+                if (!recv_all(clientSocket, vals[j].data(), len)) {
+                    close(clientSocket);
+                    return;
+                }
+            }
 
-        if (!recv_all(clientSocket, &net_key, 4) ||
-            !recv_all(clientSocket, &net_len, 4)) {
-            close(clientSocket);
-            return;
-        }
-        keys[j] = ntohl(net_key);
-        int len = ntohl(net_len);
+            std::vector<int> lockOrder = {0, 1, 2};
+            std::sort(lockOrder.begin(), lockOrder.end(), [&keys](int a, int b){
+                return keys[a] < keys[b];
+            });
 
-        vals[j].resize(len);
-        if (!recv_all(clientSocket, vals[j].data(), len)) {
-            close(clientSocket);
-            return;
-        }
-    }
+            std::vector<std::vector<int>> allReplications(3);
+            for (int j = 0; j < 3; j++){
+                allReplications[j] = getReplicationMapping(keys[j], myIndex, replication, processIPS.size());
+            }
 
-    // Order keys
-    std::vector<int> lockOrder = {0, 1, 2};
-    std::sort(lockOrder.begin(), lockOrder.end(), [&keys](int a, int b){
-        return keys[a] < keys[b];
-    });
+            int currentOperation = ((myIndex + 1) << 28) | (operationCounter.fetch_add(1) & 0x0FFFFFFF);
 
-    // Compute replicas
-    std::vector<std::vector<int>> allReplications(3);
-    for (int j = 0; j < 3; j++){
-        allReplications[j] = getReplicationMapping(keys[j], myIndex, replication, processIPS.size());
-    }
-
-    int currentOperation = operationCounter.fetch_add(1) + (myIndex+1)*operations;
-    bool allAcquired = false;
-    const int maxRetries = 10;
-
-    for(int attempt = 0; attempt < maxRetries && !allAcquired; attempt++){
-        std::cerr << "[3put][op=" << currentOperation << "] Attempt " << attempt+1 << " to acquire locks" << std::endl;
-        allAcquired = true;
-        std::vector<std::pair<int,int>> acquiredLocks; // key,nodeID pairs
-
-        for(int j : lockOrder){
-            for(auto nodeID : allReplications[j]){
-                bool gotLock = false;
-                if(nodeID == myIndex){
-                    gotLock = map.getLock(keys[j], currentOperation); // implement non-blocking tryLock
-                    if(gotLock) acquiredLocks.emplace_back(keys[j], nodeID);
-                } else {
-                    int temp_sock = connect_to_server(processIPS[nodeID], port);
-                    if(temp_sock >= 0){
-                        gotLock = sendLock(temp_sock, keys[j], currentOperation); // returns true if lock granted
-                        close(temp_sock);
-                        if(gotLock) acquiredLocks.emplace_back(keys[j], nodeID);
+            std::map<int, int> repl_socks;
+            for (int j = 0; j < 3; j++) {
+                for (auto nodeID : allReplications[j]) {
+                    if (nodeID != myIndex && repl_socks.find(nodeID) == repl_socks.end()) {
+                        repl_socks[nodeID] = connect_to_server(processIPS[nodeID], port);
                     }
                 }
+            }
 
-                if(!gotLock){
-                    std::cerr << "[3put][op=" << currentOperation << "] Failed to acquire lock for key "
-                              << keys[j] << " on node " << nodeID << ", releasing acquired locks" << std::endl;
+            bool allAcquired = false;
+            const int maxRetries = 10;
 
-                    // Release everything we have acquired so far
-                    for(auto it = acquiredLocks.rbegin(); it != acquiredLocks.rend(); ++it){
-                        int k = it->first, n = it->second;
-                        if(n == myIndex) map.unLock(k, currentOperation);
-                        else {
-                            int temp_sock = connect_to_server(processIPS[n], port);
-                            if(temp_sock >= 0){
-                                sendUnlock(temp_sock, k, currentOperation);
-                                close(temp_sock);
+            for(int attempt = 0; attempt < maxRetries && !allAcquired; attempt++){
+                allAcquired = true;
+                std::vector<std::pair<int,int>> acquiredLocks;
+
+                for(int j : lockOrder){
+                    for(auto nodeID : allReplications[j]){
+                        bool gotLock = false;
+
+                        if(nodeID == myIndex){
+                            gotLock = map.getLock(keys[j], currentOperation);
+                        } else {
+                            gotLock = sendLock(repl_socks[nodeID], keys[j], currentOperation);
+                        }
+
+                        if(gotLock){
+                            acquiredLocks.emplace_back(j, nodeID);
+                        } else {
+                            for(auto it = acquiredLocks.rbegin(); it != acquiredLocks.rend(); ++it){
+                                int keyIdx = it->first;
+                                int n = it->second;
+                                if(n == myIndex){
+                                    map.unLock(keys[keyIdx], currentOperation);
+                                } else {
+                                    sendUnlock(repl_socks[n], keys[keyIdx], currentOperation);
+                                }
                             }
+                            allAcquired = false;
+                            std::this_thread::sleep_for(std::chrono::milliseconds(2 + generateRandomInteger(1,10)));
+                            break;
                         }
                     }
-                    allAcquired = false;
-                    std::this_thread::sleep_for(std::chrono::milliseconds(10 + rand()%10));
-                    break; // break inner loop to retry all locks
+                    if(!allAcquired) break;
                 }
             }
-            if(!allAcquired) break; // break outer loop if any lock failed
-        }
-    }
 
-    if(!allAcquired){
-        std::cerr << "[3put][op=" << currentOperation << "] Failed to acquire all locks after retries" << std::endl;
-        send(clientSocket, "\0", 1, 0);
-        return;
-    }
-
-    // Perform puts
-    bool ok = false;
-    for(int j : lockOrder){
-        for(auto nodeID : allReplications[j]){
-            if(nodeID == myIndex){
-                ok = map.put(keys[j], vals[j]);
+            if(!allAcquired){
+                for(auto& [id, sock] : repl_socks){
+                    uint8_t close_msg = 'C';
+                    send_all(sock, &close_msg, 1);
+                    close(sock);
+                }
+                char zero = '0';
+                send_all(clientSocket, &zero, 1);
                 continue;
             }
-            int temp_sock = connect_to_server(processIPS[nodeID], port);
-            if(temp_sock >= 0){
-                sendAdjust(temp_sock, keys[j], vals[j], currentOperation);
-                close(temp_sock);
+
+            bool ok = false;
+            for(int j : lockOrder){
+                for(auto nodeID : allReplications[j]){
+                    if(nodeID == myIndex){
+                        ok = map.put(keys[j], vals[j]);
+                    } else {
+                        sendAdjust(repl_socks[nodeID], keys[j], vals[j], currentOperation);
+                    }
+                }
+            }
+            for(int j : lockOrder){
+                for(auto nodeID : allReplications[j]){
+                    if(nodeID == myIndex){
+                        map.unLock(keys[j], currentOperation);
+                    } else {
+                        sendUnlock(repl_socks[nodeID], keys[j], currentOperation);
+                    }
+                }
+            }
+
+            for(auto& [id, sock] : repl_socks){
+                uint8_t close_msg = 'C';
+                send_all(sock, &close_msg, 1);
+                close(sock);
+            }
+
+            uint8_t ack = ok ? 1 : 0;
+            if(!send_all(clientSocket, &ack, 1)){
+                std::cerr << "Failed to send acknowledgment\n";
+                return;
             }
         }
-    }
-
-    // Release locks
-    for(int j : lockOrder){
-        for(auto nodeID : allReplications[j]){
-            if(nodeID == myIndex){
-                map.unLock(keys[j], currentOperation);
-                continue;
-            }
-            int temp_sock = connect_to_server(processIPS[nodeID], port);
-            if(temp_sock >= 0){
-                sendUnlock(temp_sock, keys[j], currentOperation);
-                close(temp_sock);
-            }
-        }
-    }
-
-    send(clientSocket, &ok, 1, 0);
-}
 
         else if (op == 'C'){
             close(clientSocket);
@@ -454,9 +479,14 @@ void dealWithSocket(int clientSocket, DHSList& map, std::atomic<int>& operationC
             // FD_CLR(clientSocket, &master);
             // std::thread([clientSocket, key, operation, &map]() {
             bool ok = map.getLock(key, operation);
-            send(clientSocket, &ok, 1, 0);
-                close(clientSocket);
+            uint8_t ack = ok ? 1 : 0;
+            if (!send_all(clientSocket, &ack, 1)) {
+                std::cerr << "Failed to send acknowledgment\n";
                 return;
+            }
+
+            // close(clientSocket);
+            // return;
             // }).detach(); 
         }
         else if (op == 'U'){
@@ -475,9 +505,14 @@ void dealWithSocket(int clientSocket, DHSList& map, std::atomic<int>& operationC
             // FD_CLR(clientSocket, &master);
             // std::thread([clientSocket, key, operation, &map]() {
             bool ok = map.unLock(key, operation);
-            send(clientSocket, &ok, 1, 0);
-                close(clientSocket); 
+            uint8_t ack = ok ? 1 : 0;
+            if (!send_all(clientSocket, &ack, 1)) {
+                std::cerr << "Failed to send acknowledgment\n";
                 return;
+            }
+
+                // close(clientSocket); 
+                // return;
             // }).detach();
 
         }

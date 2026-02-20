@@ -62,27 +62,25 @@ bool DHSList::getLock(int key, int operation){ //, std::string serverIP
     //since the same server will be telling everyone to lock it we can skip it if it is already locked by that ip
     //actaully jk, make it on the server to only lock things once
     int index = key % size;
-    serverLockingsLocks[index]->lock(); //should be shared but just trying to undeadlock rn
+    serverLockingsLocks[index]->lock();
     if(serverLockings[index] == operation){
-        serverLockingsLocks[index]->unlock(); //s
+        serverLockingsLocks[index]->unlock();
         return true;
     }
-    // serverLockingsLocks[index]->unlock_shared(); //cant upgrade apparently
-    // serverLockingsLocks[index]->lock();
+    bool got = readMutex[index]->try_lock();
+    if(got) serverLockings[index] = operation;
     serverLockingsLocks[index]->unlock();
-    bool returnVal = readMutex[index]->try_lock();
-    if(!returnVal){
-        return false;//returnVal
-    }
-    serverLockings[index] = operation;
-    
-    return true;
+    return got;
 }
 bool DHSList::unLock(int key, int operation){
     int index = key % size;
     serverLockingsLocks[index]->lock();
-    readMutex[index]->unlock();
+    if(serverLockings[index] != operation){
+        serverLockingsLocks[index]->unlock();
+        return false;
+    }
     serverLockings[index] = NULL;
+    readMutex[index]->unlock();
     serverLockingsLocks[index]->unlock();
     return true;
 }
