@@ -223,7 +223,7 @@ void worker(int operations, int keys, int port, const std::vector<std::string>& 
     }
     for (int i = 0; i < operations; i++) {
 
-        std::cout << i << std::endl;
+        // std::cout << i << std::endl;
         int key = generateRandomInteger(1, keys);
         int index = key % processes.size();
 
