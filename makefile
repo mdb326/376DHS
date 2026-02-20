@@ -3,7 +3,7 @@ hw:
 # 	g++ -g -std=c++17 -fgnu-tm -pthread -O3 clientCache.cpp -o clientCache
 # 	g++ -g -std=c++17 -fgnu-tm -pthread -O3 clientCacheSmall.cpp -o clientCacheSmall
 # 	g++ -g -std=c++17 -fgnu-tm -pthread -O3 clientParallel.cpp -o clientParallel
-	g++ -g -std=c++17 -fgnu-tm -pthread -O3 serverLU.cpp -o server
+	g++ -g -std=c++17 -fgnu-tm -pthread -O3 serverPool.cpp -o server
 
 clean: 
 	rm client
