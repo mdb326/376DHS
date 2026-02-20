@@ -272,19 +272,20 @@ void dealWithSocket(int clientSocket, DHSList& map, std::atomic<int>& operationC
             for (auto nodeID : replications) {
                 if (nodeID == myIndex) {
                     ok = map.put(key, value);
+                    map.unLock(key, currentOperation);
                 } else {
                     sendAdjust(repl_socks[nodeID], key, value, currentOperation);
                 }
             }
 
-            // Unlock phase
-            for (auto nodeID : replications) {
-                if (nodeID == myIndex) {
-                    map.unLock(key, currentOperation);
-                } else {
-                    sendUnlock(repl_socks[nodeID], key, currentOperation);
-                }
-            }
+            // Unlock phase -- not needed 
+            // for (auto nodeID : replications) {
+            //     if (nodeID == myIndex) {
+            //         map.unLock(key, currentOperation);
+            //     } else {
+            //         sendUnlock(repl_socks[nodeID], key, currentOperation);
+            //     }
+            // }
 
             for (auto& [id, sock] : repl_socks) {
                 uint8_t close_msg = 'C';
@@ -325,6 +326,9 @@ void dealWithSocket(int clientSocket, DHSList& map, std::atomic<int>& operationC
             }
 
             bool ok = map.put(key, value);
+            if(ok){
+                ok = map.unLock(key, operation);
+            }
             uint8_t ack = ok ? 1 : 0;
             if (!send_all(clientSocket, &ack, 1)) {
                 std::cerr << "Failed to send acknowledgment\n";
@@ -428,20 +432,22 @@ void dealWithSocket(int clientSocket, DHSList& map, std::atomic<int>& operationC
                 for(auto nodeID : allReplications[j]){
                     if(nodeID == myIndex){
                         ok = map.put(keys[j], vals[j]);
-                    } else {
-                        sendAdjust(repl_socks[nodeID], keys[j], vals[j], currentOperation);
-                    }
-                }
-            }
-            for(int j : lockOrder){
-                for(auto nodeID : allReplications[j]){
-                    if(nodeID == myIndex){
                         map.unLock(keys[j], currentOperation);
                     } else {
+                        sendAdjust(repl_socks[nodeID], keys[j], vals[j], currentOperation);
                         sendUnlock(repl_socks[nodeID], keys[j], currentOperation);
                     }
                 }
             }
+            // for(int j : lockOrder){
+            //     for(auto nodeID : allReplications[j]){
+            //         if(nodeID == myIndex){
+            //             map.unLock(keys[j], currentOperation);
+            //         } else {
+            //             sendUnlock(repl_socks[nodeID], keys[j], currentOperation);
+            //         }
+            //     }
+            // }
 
             for(auto& [id, sock] : repl_socks){
                 uint8_t close_msg = 'C';
