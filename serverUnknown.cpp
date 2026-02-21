@@ -189,6 +189,39 @@ bool sendAdjust(int sock, int key, const std::vector<uint8_t>& value, int operat
 
     return ack != 0;
 }
+bool forwardRequest(int clientSocket, const std::string& targetIP, int port, const std::vector<uint8_t>& message, bool isGet) {
+    int fwd_sock = connect_to_server(targetIP, port);
+    if (fwd_sock < 0) return false;
+
+    if (!send_all(fwd_sock, message.data(), message.size())) {
+        close(fwd_sock);
+        return false;
+    }
+
+    uint8_t status;
+    if (!recv_all(fwd_sock, &status, 1)) {
+        close(fwd_sock);
+        return false;
+    }
+    send_all(clientSocket, &status, 1);
+
+    //need to send both value and success
+    if (isGet && status == '1') {
+        int net_len;
+        if (!recv_all(fwd_sock, &net_len, 4)) { close(fwd_sock); return false; }
+        send_all(clientSocket, &net_len, 4);
+
+        int len = ntohl(net_len);
+        std::vector<uint8_t> value(len);
+        if (!recv_all(fwd_sock, value.data(), len)) { close(fwd_sock); return false; }
+        send_all(clientSocket, value.data(), len);
+    }
+
+    uint8_t close_msg = 'C';
+    send_all(fwd_sock, &close_msg, 1);
+    close(fwd_sock);
+    return true;
+}
 void dealWithSocket(int clientSocket, DHSList& map, std::atomic<int>& operationCounter, int myIndex, int operations, int replication, 
                     const std::vector<std::string>& processIPS, int port) {
     //keep open until we get a c
@@ -204,14 +237,23 @@ void dealWithSocket(int clientSocket, DHSList& map, std::atomic<int>& operationC
         // std::cout << op << std::endl;
         if (op == 'G') {
             //get
-            
-            //figure out how to allow for simultaneous reads tho
             int net_key;
             if (!recv_all(clientSocket, &net_key, 4)) {
                 close(clientSocket);
                 return;
             }
             int key = ntohl(net_key);
+
+            int nodeIndex = key % processIPS.size();
+            if(nodeIndex != myIndex){
+                //forward to correct node
+                std::vector<uint8_t> message;
+                message.push_back('G');
+                uint8_t* p = reinterpret_cast<uint8_t*>(&net_key);
+                message.insert(message.end(), p, p + 4);
+                forwardRequest(clientSocket, processIPS[nodeIndex], port, message, true);
+                continue;
+            }
             
             int currentOperation = ((myIndex + 1) << 28) | (operationCounter.fetch_add(1) & 0x0FFFFFFF);
             map.getLock(key, currentOperation); 
@@ -248,6 +290,20 @@ void dealWithSocket(int clientSocket, DHSList& map, std::atomic<int>& operationC
             int len = ntohl(net_len);
             std::vector<uint8_t> value(len);
             if (!recv_all(clientSocket, value.data(), len)) { close(clientSocket); return; }
+
+            int nodeIndex = key % processIPS.size();
+            if(nodeIndex != myIndex){
+                //forward to correct node
+                std::vector<uint8_t> message;
+                message.push_back('P');
+                uint8_t* pk = reinterpret_cast<uint8_t*>(&net_key);
+                message.insert(message.end(), pk, pk + 4);
+                uint8_t* pl = reinterpret_cast<uint8_t*>(&net_len);
+                message.insert(message.end(), pl, pl + 4);
+                message.insert(message.end(), value.begin(), value.end());
+                forwardRequest(clientSocket, processIPS[nodeIndex], port, message, false);
+                continue;
+            }
 
             std::vector<int> replications = getReplicationMapping(key, myIndex, replication, processIPS.size());
             int currentOperation = operationCounter.fetch_add(1) + ((myIndex + 1) << 28);
@@ -344,6 +400,24 @@ void dealWithSocket(int clientSocket, DHSList& map, std::atomic<int>& operationC
                     close(clientSocket);
                     return;
                 }
+            }
+
+            int nodeIndex = keys[0] % processIPS.size();
+            if(nodeIndex != myIndex){
+                //forward to correct node
+                std::vector<uint8_t> message;
+                message.push_back('3');
+                for (int j = 0; j < 3; j++) {
+                    uint32_t net_key = htonl(keys[j]);
+                    uint8_t* pk = reinterpret_cast<uint8_t*>(&net_key);
+                    message.insert(message.end(), pk, pk + 4);
+                    uint32_t net_len = htonl(vals[j].size());
+                    uint8_t* pl = reinterpret_cast<uint8_t*>(&net_len);
+                    message.insert(message.end(), pl, pl + 4);
+                    message.insert(message.end(), vals[j].begin(), vals[j].end());
+                }
+                forwardRequest(clientSocket, processIPS[nodeIndex], port, message, false);
+                continue;
             }
 
             std::vector<int> lockOrder = {0, 1, 2};

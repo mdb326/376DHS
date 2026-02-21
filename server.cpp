@@ -251,14 +251,12 @@ void dealWithSocket(int clientSocket, DHSList& map, std::atomic<int>& operationC
             std::vector<int> replications = getReplicationMapping(key, myIndex, replication, processIPS.size());
             int currentOperation = operationCounter.fetch_add(1) + ((myIndex + 1) << 28);
 
-            // Open one socket per replication node
             std::map<int, int> repl_socks;
             for (auto nodeID : replications) {
                 if (nodeID != myIndex)
                     repl_socks[nodeID] = connect_to_server(processIPS[nodeID], port);
             }
 
-            // Lock phase
             for (auto nodeID : replications) {
                 if (nodeID == myIndex) {
                     while (!map.getLock(key, currentOperation)) {}
@@ -267,7 +265,6 @@ void dealWithSocket(int clientSocket, DHSList& map, std::atomic<int>& operationC
                 }
             }
 
-            // Adjust phase
             bool ok = false;
             for (auto nodeID : replications) {
                 if (nodeID == myIndex) {
@@ -277,7 +274,6 @@ void dealWithSocket(int clientSocket, DHSList& map, std::atomic<int>& operationC
                 }
             }
 
-            // Unlock phase
             for (auto nodeID : replications) {
                 if (nodeID == myIndex) {
                     map.unLock(key, currentOperation);
