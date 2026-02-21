@@ -244,9 +244,10 @@ void dealWithSocket(int clientSocket, DHSList& map, std::atomic<int>& operationC
             }
             int key = ntohl(net_key);
 
-            int nodeIndex = key % processIPS.size();
-            if(nodeIndex != myIndex){
+            std::vector<int> nodes = getReplicationMapping(key, myIndex, replication, processIPS.size());
+            if(std::find(nodes.begin(), nodes.end(), myIndex) == nodes.end()){
                 //forward to correct node
+                int nodeIndex = key % processIPS.size();
                 std::vector<uint8_t> message;
                 message.push_back('G');
                 uint8_t* p = reinterpret_cast<uint8_t*>(&net_key);
@@ -291,9 +292,10 @@ void dealWithSocket(int clientSocket, DHSList& map, std::atomic<int>& operationC
             std::vector<uint8_t> value(len);
             if (!recv_all(clientSocket, value.data(), len)) { close(clientSocket); return; }
 
-            int nodeIndex = key % processIPS.size();
-            if(nodeIndex != myIndex){
+            std::vector<int> nodes = getReplicationMapping(key, myIndex, replication, processIPS.size());
+            if(std::find(nodes.begin(), nodes.end(), myIndex) == nodes.end()){
                 //forward to correct node
+                int nodeIndex = key % processIPS.size();
                 std::vector<uint8_t> message;
                 message.push_back('P');
                 uint8_t* pk = reinterpret_cast<uint8_t*>(&net_key);
@@ -402,9 +404,10 @@ void dealWithSocket(int clientSocket, DHSList& map, std::atomic<int>& operationC
                 }
             }
 
-            int nodeIndex = keys[0] % processIPS.size();
-            if(nodeIndex != myIndex){
+            std::vector<int> nodes = getReplicationMapping(keys[0], myIndex, replication, processIPS.size());
+            if(std::find(nodes.begin(), nodes.end(), myIndex) == nodes.end()){
                 //forward to correct node
+                int nodeIndex = keys[0] % processIPS.size();
                 std::vector<uint8_t> message;
                 message.push_back('3');
                 for (int j = 0; j < 3; j++) {
@@ -603,7 +606,7 @@ int main(int argc, char* argv[]) {
         lockLocks.emplace_back(std::make_unique<std::shared_mutex>());
     }
     locksHeld.resize(processIPS.size(), false);
-    DHSList map(keys / processIPS.size() + 1);
+    DHSList map(keys);
     // DHS map;
     // map.put(502, 15);
     //Cupid: 128.180.120.70

@@ -529,7 +529,7 @@ int main(int argc, char* argv[]) {
         lockLocks.emplace_back(std::make_unique<std::shared_mutex>());
     }
     locksHeld.resize(processIPS.size(), false);
-    DHSList map(keys / processIPS.size() + 1);
+    DHSList map(keys);
     // DHS map;
     // map.put(502, 15);
     //Cupid: 128.180.120.70
