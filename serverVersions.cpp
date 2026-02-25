@@ -232,6 +232,39 @@ bool forwardRequest(int clientSocket, const std::string& targetIP, int port, con
     close(fwd_sock);
     return true;
 }
+int get_val(int key, std::string serverIP, int serverPort, int clientSocket){
+    std::vector<uint8_t> message;
+    message.reserve(5);
+    message.push_back('S'); //serverside get to avoid recursion
+    uint8_t buf[4];
+    int net_key = htonl(key);
+    std::memcpy(buf, &net_key, 4);
+    message.insert(message.end(), buf, buf + 4);
+    if (!send_all(clientSocket, message.data(), message.size())){
+        return 0;
+    }
+
+    char status;
+    if (!recv_all(clientSocket, &status, 1)) {
+        std::cerr << "Failed to receive status\n";
+        return NULL;
+    }
+    if (status == '0'){
+        return NULL;
+    }
+    int netLen;
+    recv_all(clientSocket, &netLen, sizeof(netLen));
+    int len = ntohl(netLen);
+    
+    std::vector<uint8_t> value(len);
+    recv_all(clientSocket, value.data(), len);
+    
+    int result;
+    std::memcpy(&result, value.data(), sizeof(result));
+
+
+    return ntohl(result);
+}
 void dealWithSocket(int clientSocket, DHSVersions& map, LamportClock& lamport, int myIndex, int operations, int replication, 
                     const std::vector<std::string>& processIPS, int port) {
     //keep open until we get a c
@@ -269,6 +302,52 @@ void dealWithSocket(int clientSocket, DHSVersions& map, LamportClock& lamport, i
             // int currentOperation = ((myIndex + 1) << 28) | (operationCounter.fetch_add(1) & 0x0FFFFFFF);
             // map.getLock(key, currentOperation); 
             auto res = map.get(key);
+            for(int nodeID : nodes){
+                if(nodeID == myIndex){
+                    continue;
+                }
+                int sock = connect_to_server(processIPS[nodeID], port);
+                if (sock < 0){
+                    continue;
+                }
+                std::vector<uint8_t> message;
+                message.push_back('S');
+                uint32_t net_key = htonl(key);
+                uint8_t* p = reinterpret_cast<uint8_t*>(&net_key);
+                message.insert(message.end(), p, p + 4);
+                send_all(sock, message.data(), message.size());
+
+                char status;
+                if (!recv_all(sock, &status, 1)) { close(sock); continue; }
+                if(status == '1'){
+                    int net_len;
+                    if (!recv_all(sock, &net_len, 4)) { 
+                        close(sock); 
+                        continue; 
+                    }
+                    int len = ntohl(net_len);
+
+                    std::vector<uint8_t> value(len);
+                    if (!recv_all(sock, value.data(), len)) { 
+                        close(sock); continue; 
+                    }
+
+                    uint64_t net_ts;
+                    if (!recv_all(sock, &net_ts, 8)) { 
+                        close(sock); 
+                        continue; 
+                    }
+                    uint64_t ts = ntohll(net_ts);
+
+                    if (ts > res.version) {
+                        res.version = ts;
+                        res.data = value;
+                    }
+                }
+                uint8_t close_msg = 'C';
+                send_all(sock, &close_msg, 1);
+                close(sock);
+            }
             // map.unLock(key, currentOperation); 
 
             if (res.data.size() == 0) {
@@ -285,6 +364,44 @@ void dealWithSocket(int clientSocket, DHSVersions& map, LamportClock& lamport, i
                 uint8_t* p = reinterpret_cast<uint8_t*>(&len);
                 msg.insert(msg.end(), p, p + sizeof(len));
                 msg.insert(msg.end(), res.data.begin(), res.data.end());
+                if (!send_all(clientSocket, msg.data(), msg.size())) {
+                    std::cerr << "Failed to send get message\n";
+                    return;
+                }
+            }
+        }
+        else if (op == 'S') {
+            int net_key;
+            if (!recv_all(clientSocket, &net_key, 4)) {
+                close(clientSocket);
+                return;
+            }
+            int key = ntohl(net_key);
+
+            
+            // int currentOperation = ((myIndex + 1) << 28) | (operationCounter.fetch_add(1) & 0x0FFFFFFF);
+            // map.getLock(key, currentOperation); 
+            auto res = map.get(key);
+            // map.unLock(key, currentOperation); 
+
+            if (res.data.size() == 0) {
+                char zero = '0';
+                if (!send_all(clientSocket, &zero, 1)) {
+                    std::cerr << "Failed to send '0' acknowledgment\n";
+                    return;
+                }
+            } else {
+                std::vector<uint8_t> msg;
+                uint32_t net_len = htonl(res.data.size());
+                uint64_t net_version = htonll(res.version);
+
+                msg.reserve(1 + 4 + res.data.size() + 8);
+                msg.push_back('1');
+                uint8_t* p = reinterpret_cast<uint8_t*>(&net_len);
+                msg.insert(msg.end(), p, p + 4);
+                msg.insert(msg.end(), res.data.begin(), res.data.end());
+                uint8_t* pv = reinterpret_cast<uint8_t*>(&net_version);
+                msg.insert(msg.end(), pv, pv + 8);
                 if (!send_all(clientSocket, msg.data(), msg.size())) {
                     std::cerr << "Failed to send get message\n";
                     return;
