@@ -91,14 +91,15 @@ int connect_to_server(const std::string& ip, int port) {
 }
 std::vector<int> getReplicationMapping(int key, int myIndex, int replicationIndex, int processQuantity){
     //simple atm
+    int index = key % processQuantity;
     std::vector<int> res;
-    res.push_back(myIndex);
+    res.push_back(index);
     for(int i = 0; i < replicationIndex-1; i++){
-        myIndex++;
-        if (myIndex >= processQuantity){
-            myIndex = 0;
+        index++;
+        if (index >= processQuantity){
+            index = 0;
         }
-        res.push_back(myIndex);
+        res.push_back(index);
     }
     //ensure consistent locking order
     std::sort(res.begin(), res.end());
